@@ -9,9 +9,8 @@ const NAV_ITEMS = [
   { label: "Histórico", href: null },
 ];
 
-export const SIDEBAR_WIDTH = 200;
 
-export default function AppShell({ children }) {
+export default function AppBar({ children }) {
   const pathname = usePathname();
 
   return (
@@ -69,7 +68,7 @@ const styles = StyleSheet.create({
     height: 100,
   },
   sidebarTop: {
-    width: SIDEBAR_WIDTH,
+    width: 200,
     backgroundColor: "#fff4f4",
     justifyContent: "center",
     alignItems: "center",
@@ -102,7 +101,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   sidebar: {
-    width: SIDEBAR_WIDTH,
+    width: 200,
     backgroundColor: "#e6e6e6",
     paddingTop: 16,
   },
