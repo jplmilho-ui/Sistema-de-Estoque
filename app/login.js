@@ -34,6 +34,11 @@ return (
           <TouchableOpacity style={styles.button} onPress={() => router.push("/dashboard")}>
             <Text style={styles.buttonText}>Entrar</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => router.push("/cadastro")}>
+            <Text style={styles.link}>Criar uma conta</Text>
+          </TouchableOpacity>
+      
         </View>
       </View>
 
@@ -53,7 +58,7 @@ const styles = StyleSheet.create({
 card: {
   width: '100%',
   maxWidth: 450,
-  height: 400,
+  height: 370,
   backgroundColor: '#eaeaea',
   borderRadius: 10,
   padding: 24,
@@ -87,8 +92,7 @@ subtitle: {
     marginBottom: 12,
   },
   footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flex: 1,
     alignItems: 'center',
     marginTop: 8,
 
@@ -105,4 +109,10 @@ subtitle: {
     fontSize: 16,
     fontWeight: '500',
   },
+    link: {
+    marginTop: 18,
+    fontSize: 14,
+    color: '#054fb0',
+    fontWeight: '500',
+  }
 });
