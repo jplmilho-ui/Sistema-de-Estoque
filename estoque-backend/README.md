@@ -1,6 +1,6 @@
 # Backend do sistema de estoque
 
-API em Node.js + Express + Prisma + PostgreSQL, com registro e login prontos.
+API em Node.js + Express + Prisma + PostgreSQL
 
 ## 1. Instalar as dependências
 
