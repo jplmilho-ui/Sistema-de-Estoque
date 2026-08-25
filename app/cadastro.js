@@ -1,11 +1,61 @@
 import React, { useState } from 'react';
-import {View, Text,TextInput,TouchableOpacity, StyleSheet, Alert,} from 'react-native';
+import {View, Text,TextInput,TouchableOpacity, StyleSheet, ActivityIndicator,} from 'react-native';
 import { router } from "expo-router";
+import { registerUser, loginUser } from "../services/authApi";
+import { saveSession } from "../services/authStorage";
+
+const SENHA_MINIMA = 8;
 
 export default function login(){
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  function clearErrorOnChange(setter) {
+    return (text) => {
+      setter(text);
+      if (errorMessage) setErrorMessage('');
+    };
+  }
+
+  async function handleCadastro() {
+    setErrorMessage('');
+
+    if (!name || !email || !password || !confirmPassword) {
+      setErrorMessage('Preencha todos os campos.');
+      return;
+    }
+
+    if (password.length < SENHA_MINIMA) {
+      setErrorMessage(`A senha precisa ter pelo menos ${SENHA_MINIMA} caracteres.`);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setErrorMessage('A confirmação precisa ser igual à senha.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // O backend cria o usuário no banco com a senha já criptografada (bcrypt.hash).
+      await registerUser(name.trim(), email.trim(), password);
+
+      // Loga automaticamente logo em seguida: essa chamada consulta o
+      // usuário recém-criado no banco de dados e devolve o token.
+      const { user, token } = await loginUser(email.trim(), password);
+      await saveSession(token, user);
+
+      router.replace("/dashboard");
+    } catch (error) {
+      setErrorMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
 return (
   <View style={styles.container}>
@@ -19,40 +69,55 @@ return (
           style={styles.input}
           placeholder="Nome"
           value={name}
-          onChangeText={setName}
+          onChangeText={clearErrorOnChange(setName)}
           autoCapitalize="words"
+          editable={!loading}
         />
 
       <TextInput
           style={styles.input}
           placeholder="E-mail"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={clearErrorOnChange(setEmail)}
           keyboardType="email-address"
           autoCapitalize="none"
+          editable={!loading}
       />
         <TextInput
           style={styles.input}
-          placeholder="Senha"
+          placeholder="Senha (mínimo 8 caracteres)"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={clearErrorOnChange(setPassword)}
           secureTextEntry
+          editable={!loading}
         />
         <TextInput
           style={styles.input}
           placeholder="Confirmar Senha"
-          value={password}
-          onChangeText={setPassword}
+          value={confirmPassword}
+          onChangeText={clearErrorOnChange(setConfirmPassword)}
           secureTextEntry
+          editable={!loading}
         />
+
+        {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
+
         <View style={styles.footer}>
 
 
-          <TouchableOpacity style={styles.button} onPress={() => router.push("/dashboard")}>
-            <Text style={styles.buttonText}>Entrar</Text>
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleCadastro}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.buttonText}>Criar conta</Text>
+            )}
           </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => router.push("/login")}>
+            <TouchableOpacity onPress={() => router.push("/login")} disabled={loading}>
             <Text style={styles.link}>Já tenho uma conta</Text>
           </TouchableOpacity>
         </View>
@@ -74,7 +139,7 @@ const styles = StyleSheet.create({
 card: {
   width: '100%',
   maxWidth: 450,
-  height: 480,
+  minHeight: 480,
   backgroundColor: '#eaeaea',
   borderRadius: 10,
   padding: 24,
@@ -107,6 +172,13 @@ subtitle: {
     color:'#202124',
     marginBottom: 12,
   },
+  errorText: {
+    width: 350,
+    color: '#c62828',
+    fontSize: 13,
+    marginTop: -6,
+    marginBottom: 12,
+  },
   footer: {
     flex: 1,
     alignItems: 'center',
@@ -118,8 +190,13 @@ subtitle: {
     borderRadius: 6,
     paddingHorizontal: 26,
     paddingVertical: 14,
-    placeholder: 'blue'
+    minWidth: 130,
+    alignItems: 'center',
+    justifyContent: 'center',
   }, 
+  buttonDisabled: {
+    opacity: 0.7,
+  },
   buttonText: {
      color: '#ffffff',
     fontSize: 16,

@@ -7,6 +7,7 @@ export default function Layout() {
       <Stack.Screen name="dashboard" options={{ headerShown: false }} />
       <Stack.Screen name="itens" options={{ headerShown: false }} />
       <Stack.Screen name="cadastro" options={{ headerShown: false }} />
+      <Stack.Screen name="usuarios" options={{ headerShown: false }} />
     </Stack>
   );
 }

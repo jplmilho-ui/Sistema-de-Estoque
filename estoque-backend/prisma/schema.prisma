@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // Modelo de usuário, usado pelo cadastro e login.
@@ -15,5 +14,8 @@ model User {
   name      String
   email     String   @unique
   password  String
+  // "user" (padrão, quem se cadastra sozinho) ou "admin" (só quem já é
+  // admin pode promover outra pessoa, pela tela de Gerenciar usuários).
+  role      String   @default("user")
   createdAt DateTime @default(now())
 }

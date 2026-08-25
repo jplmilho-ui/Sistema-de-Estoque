@@ -1,10 +1,40 @@
 import React, { useState } from 'react';
-import {View, Text,TextInput,TouchableOpacity, StyleSheet, Alert,} from 'react-native';
+import {View, Text,TextInput,TouchableOpacity, StyleSheet, ActivityIndicator,} from 'react-native';
 import { router } from "expo-router";
+import { loginUser } from "../services/authApi";
+import { saveSession } from "../services/authStorage";
 
 export default function login(){
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  async function handleLogin() {
+    setErrorMessage('');
+
+    if (!email || !password) {
+      setErrorMessage('Preencha e-mail e senha.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Vai até o backend, que consulta o usuário no banco de dados,
+      // confere a senha (bcrypt.compare) e devolve o token JWT.
+      const { user, token } = await loginUser(email.trim(), password);
+
+      await saveSession(token, user);
+
+      router.replace("/dashboard");
+    } catch (error) {
+      // Mensagem genérica de propósito: não diz se foi o e-mail ou a
+      // senha que errou (mesmo padrão de bancos e Google).
+      setErrorMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
 return (
   <View style={styles.container}>
@@ -17,25 +47,38 @@ return (
           style={styles.input}
           placeholder="E-mail"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(text) => { setEmail(text); if (errorMessage) setErrorMessage(''); }}
           keyboardType="email-address"
           autoCapitalize="none"
+          editable={!loading}
       />
         <TextInput
           style={styles.input}
           placeholder="Senha"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(text) => { setPassword(text); if (errorMessage) setErrorMessage(''); }}
           secureTextEntry
+          editable={!loading}
         />
+
+        {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
+
         <View style={styles.footer}>
 
 
-          <TouchableOpacity style={styles.button} onPress={() => router.push("/dashboard")}>
-            <Text style={styles.buttonText}>Entrar</Text>
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.buttonText}>Entrar</Text>
+            )}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => router.push("/cadastro")}>
+          <TouchableOpacity onPress={() => router.push("/cadastro")} disabled={loading}>
             <Text style={styles.link}>Criar uma conta</Text>
           </TouchableOpacity>
       
@@ -58,7 +101,7 @@ const styles = StyleSheet.create({
 card: {
   width: '100%',
   maxWidth: 450,
-  height: 370,
+  minHeight: 370,
   backgroundColor: '#eaeaea',
   borderRadius: 10,
   padding: 24,
@@ -91,6 +134,13 @@ subtitle: {
     color:'#202124',
     marginBottom: 12,
   },
+  errorText: {
+    width: 350,
+    color: '#c62828',
+    fontSize: 13,
+    marginTop: -6,
+    marginBottom: 12,
+  },
   footer: {
     flex: 1,
     alignItems: 'center',
@@ -102,8 +152,13 @@ subtitle: {
     borderRadius: 6,
     paddingHorizontal: 26,
     paddingVertical: 14,
-    placeholder: 'blue'
+    minWidth: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
   }, 
+  buttonDisabled: {
+    opacity: 0.7,
+  },
   buttonText: {
      color: '#ffffff',
     fontSize: 16,

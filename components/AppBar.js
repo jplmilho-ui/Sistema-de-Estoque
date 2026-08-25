@@ -1,17 +1,38 @@
+import { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { router, usePathname } from "expo-router";
+import { clearSession, getSession } from "../services/authStorage";
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { label: "Workspace", href: null },
   { label: "Dashboard", href: "/dashboard" },
-  { label: "Gerenciar usuários", href: null },
   { label: "Gerenciar itens", href: "/itens" },
   { label: "Histórico", href: null },
 ];
 
-
 export default function AppBar({ children }) {
   const pathname = usePathname();
+  const [role, setRole] = useState(null);
+
+  useEffect(() => {
+    getSession().then(({ user }) => setRole(user?.role ?? null));
+  }, []);
+
+  async function handleLogout() {
+    await clearSession();
+    router.replace("/login");
+  }
+
+  // "Gerenciar usuários" só entra na lista pra quem é admin.
+  const navItems =
+    role === "admin"
+      ? [
+          BASE_NAV_ITEMS[0],
+          BASE_NAV_ITEMS[1],
+          { label: "Gerenciar usuários", href: "/usuarios" },
+          ...BASE_NAV_ITEMS.slice(2),
+        ]
+      : BASE_NAV_ITEMS;
 
   return (
     <View style={styles.root}>
@@ -34,7 +55,7 @@ export default function AppBar({ children }) {
       <View style={styles.body}>
         {/* Sidebar */}
         <View style={styles.sidebar}>
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active = item.href && pathname === item.href;
             return (
               <TouchableOpacity
@@ -49,6 +70,9 @@ export default function AppBar({ children }) {
               </TouchableOpacity>
             );
           })}
+          <TouchableOpacity style={styles.navItem} onPress={handleLogout}>
+            <Text style={styles.navText}>Sair</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Conteúdo da tela */}
