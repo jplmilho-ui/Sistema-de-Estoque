@@ -1,12 +1,16 @@
+//Barra lateral + top usada em todas as telas logadas
 import { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { router, usePathname } from "expo-router";
 import { clearSession, getSession } from "../services/authStorage";
 
+
+
 const BASE_NAV_ITEMS = [
-  { label: "Workspace", href: null },
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Gerenciar itens", href: "/itens" },
+  { label: "Tela inicial", href: "/tela_inicial" },
+  { label: "Estoque", href: "/estoque" },
+  { label: "Materiais", href: null },
+  { label: "Movimentações", href: null },
   { label: "Histórico", href: null },
 ];
 
@@ -20,7 +24,7 @@ export default function AppBar({ children }) {
 
   async function handleLogout() {
     await clearSession();
-    router.replace("/login");
+    router.replace("/");
   }
 
   // "Gerenciar usuários" só entra na lista pra quem é admin.
@@ -29,7 +33,7 @@ export default function AppBar({ children }) {
       ? [
           BASE_NAV_ITEMS[0],
           BASE_NAV_ITEMS[1],
-          { label: "Gerenciar usuários", href: "/usuarios" },
+          { label: "Usuários", href: "/usuarios" },
           ...BASE_NAV_ITEMS.slice(2),
         ]
       : BASE_NAV_ITEMS;
@@ -41,6 +45,7 @@ export default function AppBar({ children }) {
 
       <View style={styles.topBar}>
         <View style={styles.sidebarTop}>
+          
           <View style={styles.logoPlaceholder}>
           </View>
         </View>
@@ -48,6 +53,7 @@ export default function AppBar({ children }) {
         <View style={styles.contentTop}>
           <View style={styles.avatar} />
         </View>
+        <title></title>
       </View>
 
 
@@ -58,6 +64,7 @@ export default function AppBar({ children }) {
           {navItems.map((item) => {
             const active = item.href && pathname === item.href;
             return (
+              <View style={styles.side_buttons}>
               <TouchableOpacity
                 key={item.label}
                 style={styles.navItem}
@@ -68,11 +75,15 @@ export default function AppBar({ children }) {
                   {item.label}
                 </Text>
               </TouchableOpacity>
+              </View>
             );
+            
           })}
-          <TouchableOpacity style={styles.navItem} onPress={handleLogout}>
+          <View style={styles.navSair}>
+            <TouchableOpacity style={styles.navItem} onPress={handleLogout}>
             <Text style={styles.navText}>Sair</Text>
           </TouchableOpacity>
+          </View>
         </View>
 
         {/* Conteúdo da tela */}
@@ -90,12 +101,18 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: "row",
     height: 100,
+    backgroundColor: "#6BBE9D"
   },
   sidebarTop: {
     width: 200,
-    backgroundColor: "#fff4f4",
+    backgroundColor: "#6BBE9D",
     justifyContent: "center",
     alignItems: "center",
+  },
+    sidebar: {
+    width: 200,
+    backgroundColor: "#2D6158",
+    paddingTop: 16,
   },
   logoPlaceholder: {
     width: 80,
@@ -124,19 +141,30 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
   },
-  sidebar: {
-    width: 200,
-    backgroundColor: "#e6e6e6",
-    paddingTop: 16,
-  },
   navItem: {
     paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
+    backgroundColor: "#6BBE9D",
+    borderRadius: 10,
+    width: 160
   },
   navText: {
-    fontSize: 14,
-    color: "#1a1a1a",
+    fontSize: 16,
+    color: "#ffffff",
+    textAlign: "center"
   },
+
+  //
+  side_buttons: {
+  padding: 10,
+  paddingHorizontal: 20,
+  },
+  navSair: {
+    padding:10,
+     paddingHorizontal: 20,
+  },
+
+  //
   navTextActive: {
     fontWeight: "bold",
   },

@@ -5,6 +5,7 @@ import { registerUser, loginUser } from "../services/authApi";
 import { saveSession } from "../services/authStorage";
 
 const SENHA_MINIMA = 8;
+const max_string = 105;
 
 export default function login(){
   const [email, setEmail] = useState('');
@@ -29,6 +30,11 @@ export default function login(){
       return;
     }
 
+    if (email.length > max_string) {
+      setErrorMessage(`O email não pode ter mais de ${max_string} caracteres`);
+      return;
+    }
+
     if (password.length < SENHA_MINIMA) {
       setErrorMessage(`A senha precisa ter pelo menos ${SENHA_MINIMA} caracteres.`);
       return;
@@ -49,7 +55,7 @@ export default function login(){
       const { user, token } = await loginUser(email.trim(), password);
       await saveSession(token, user);
 
-      router.replace("/dashboard");
+      router.replace("/tela_inicial");
     } catch (error) {
       setErrorMessage(error.message);
     } finally {
@@ -58,14 +64,15 @@ export default function login(){
   }
 
 return (
+  
   <View style={styles.container}>
-
+    
     <View style={styles.card}>
       <Text style={styles.title}>Criar conta</Text>
       <Text style={styles.subtitle}>Faça seu cadastro</Text>
       
 
-        <TextInput
+      <TextInput
           style={styles.input}
           placeholder="Nome"
           value={name}
@@ -73,7 +80,7 @@ return (
           autoCapitalize="words"
           editable={!loading}
         />
-
+ 
       <TextInput
           style={styles.input}
           placeholder="E-mail"
@@ -91,6 +98,7 @@ return (
           secureTextEntry
           editable={!loading}
         />
+
         <TextInput
           style={styles.input}
           placeholder="Confirmar Senha"
@@ -117,7 +125,7 @@ return (
             )}
           </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => router.push("/login")} disabled={loading}>
+            <TouchableOpacity onPress={() => router.push("/")} disabled={loading}>
             <Text style={styles.link}>Já tenho uma conta</Text>
           </TouchableOpacity>
         </View>

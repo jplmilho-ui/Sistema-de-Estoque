@@ -1,3 +1,4 @@
+//Chamadas de cadastro e login
 import { API_URL } from "./api";
 
 async function parseResponse(response) {

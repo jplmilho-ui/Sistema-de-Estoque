@@ -1,10 +1,10 @@
+//Caixa de busca que pode ser reutilizada apenas.
 import { View, TextInput, Text, StyleSheet } from "react-native";
-{/* Apenas a caixa de pesquisa */}
 export default function SearchBox({ value, onChangeText, placeholder }) {
   return (
     
     <View style={styles.searchBox}>
-      <Text style={styles.searchIcon}>Search</Text>
+      <Text style={styles.searchIcon}>Pesquisar</Text>
       <TextInput
         style={styles.searchInput}
         placeholder={placeholder}

@@ -1,3 +1,4 @@
+//Guarda o token/usuário no dispositivo
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const TOKEN_KEY = "@estoque:token";

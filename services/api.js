@@ -1,6 +1,6 @@
 // URL base do backend (estoque-backend).
-//
-// Ajuste conforme onde você estiver rodando o app:
+
+// Ajustar conforme onde estiver rodando o app:
 // - Web (npm run web / expo start --web): 'http://localhost:3333' funciona.
 // - Emulador Android: use 'http://10.0.2.2:3333' (o emulador enxerga o
 //   localhost do seu PC nesse endereço, não em 'localhost').

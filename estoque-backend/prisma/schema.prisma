@@ -1,3 +1,4 @@
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,8 +8,7 @@ datasource db {
 }
 
 // Modelo de usuário, usado pelo cadastro e login.
-// Quando você for evoluir o sistema de estoque, os modelos de Produto,
-// Categoria etc. entram aqui embaixo, do mesmo jeito.
+//Produto e Categoria irá ficar aqui em breve
 model User {
   id        Int      @id @default(autoincrement())
   name      String

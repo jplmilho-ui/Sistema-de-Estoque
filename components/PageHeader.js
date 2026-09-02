@@ -1,9 +1,9 @@
+//Cabeçalho de página (Título,ações)
 import { View, Text, StyleSheet } from "react-native";
 
 export default function PageHeader({ title, actions }) {
   return (
     <>
-    {/* pode ser usado em todas as páginas */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{title}</Text>
 

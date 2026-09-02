@@ -3,14 +3,13 @@ import {
   View,Text,TextInput,TouchableOpacity,StyleSheet,ScrollView,ActivityIndicator,Alert,} from "react-native";
 import { router } from "expo-router";
 
-// Componentes reutilizáveis da aplicação
 import AppBar from "../components/AppBar";
 import PageHeader from "../components/PageHeader";
 
-// Função responsável por recuperar a sessão salva
+
 import { getSession } from "../services/authStorage";
 
-// Funções responsáveis pela comunicação com o backend
+
 import {
   listUsers,
   createUser,
@@ -18,7 +17,6 @@ import {
 } from "../services/usersApi";
 
 
-// Quantidade mínima de caracteres da senha
 const SENHA_MINIMA = 8;
 
 

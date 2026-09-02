@@ -1,10 +1,18 @@
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const prisma = require('../lib/prisma');
+
+// CONTROLE DE AUTENTICAÇÃO DO BACKEND
+
+// importacação de bibliotecas
+const bcrypt = require('bcryptjs'); //Criptografia de senhas
+const jwt = require('jsonwebtoken'); // TOKEN PARA LOGAR AO SISTEMA 
+const prisma = require('../lib/prisma'); //Conexão com o Prisma que permite o Node.js conversar com o Postgre
 
 const SENHA_MINIMA = 8;
 
-async function register(req, res) {
+
+// VERIFICAÇÃO DE ERROS
+
+//FUNÇÃO QUE REGISTRA O USUÁRIO
+async function register(req, res)  { 
   try {
     const { name, email, password } = req.body;
 
@@ -17,11 +25,13 @@ async function register(req, res) {
         error: `A senha precisa ter pelo menos ${SENHA_MINIMA} caracteres.`,
       });
     }
-
+  //Verifica se existe um usuário com o email colocado
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       return res.status(409).json({ error: 'Já existe um usuário com esse email.' });
     }
+
+
 
     const hashedPassword = await bcrypt.hash(password, 10);
 

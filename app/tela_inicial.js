@@ -6,7 +6,7 @@ import PageHeader from "../components/PageHeader";
 import SearchBox from "../components/SearchBox";
 import { getSession } from "../services/authStorage";
 
-export default function Dashboard() {
+export default function tela_inicial() {
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
@@ -28,13 +28,11 @@ export default function Dashboard() {
   return (
     <AppBar>
       <PageHeader
-        title="Dashboard"
+        title="Tela Inicial"
         actions={
           <>
           
-            <TouchableOpacity style={styles.retirarButton}>
-              <Text style={styles.retirarButtonText}>Retirar Item</Text>
-            </TouchableOpacity>
+
 
             <SearchBox />
           </>
@@ -69,7 +67,7 @@ export default function Dashboard() {
         <Text style={styles.cardNumber}>3</Text>
       </View>
 
-      <View style={styles.card}>
+      <View style={[styles.card ,{backgroundColor: "#C86756"}]}>
         <Text style={styles.cardTitle}>Divergências</Text>
         <Text style={styles.cardNumber}>1</Text>
       </View>
@@ -137,16 +135,15 @@ const styles = StyleSheet.create({
 
   verificarButton: {
     borderWidth: 1,
-    borderColor: "#888888",
     borderRadius: 4,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#1B4A3B",
     paddingHorizontal: 22,
     paddingVertical: 7,
   },
 
   verificarText: {
     fontSize: 12,
-    color: "#1a1a1a",
+    color: "#ffffff",
   },
 
   cardsContainer: {

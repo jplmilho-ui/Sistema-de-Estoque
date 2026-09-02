@@ -1,3 +1,4 @@
+//Conexão do prisma com o PostgreSQL
 require('dotenv/config');
 
 const { PrismaClient } = require('@prisma/client');
