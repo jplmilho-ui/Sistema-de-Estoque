@@ -6,9 +6,9 @@ export default function Layout() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="tela_inicial" options={{ headerShown: false }} />
       <Stack.Screen name="estoque" options={{ headerShown: false }} />
-      <Stack.Screen name="cadastro" options={{ headerShown: false }} />
       <Stack.Screen name="usuarios" options={{ headerShown: false }} />
-
+      <Stack.Screen name="materiais" options={{ headerShown: false }} />
+      <Stack.Screen name="movimentacoes" options={{ headerShown: false }} />
     </Stack>
   );
 }

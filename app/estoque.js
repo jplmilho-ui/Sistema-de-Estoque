@@ -46,7 +46,7 @@ export default function Itens() {
   return (
     <AppBar>
       <PageHeader
-        title="Editar itens"
+        title="Estoque"
         actions={
           <> <TouchableOpacity style={styles.retirarButton}>
                   <Text style={styles.addButtonText}>Retirar Item</Text>

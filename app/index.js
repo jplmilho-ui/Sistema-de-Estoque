@@ -1,5 +1,14 @@
 import React, { useState } from 'react';
-import {View, Text,TextInput,TouchableOpacity, StyleSheet, ActivityIndicator,} from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Image,
+  Alert,
+} from 'react-native';
 import { router } from "expo-router";
 import { loginUser } from "../services/authApi";
 import { saveSession } from "../services/authStorage";
@@ -35,138 +44,161 @@ export default function login(){
     }
   }
 
-return (
-  <View style={styles.container}>
+  return (
+    <View style={styles.container}>
+      <View style={styles.card}>
 
-    <View style={styles.card}>
-      <Text style={styles.title}>Fazer login</Text>
-      <Text style={styles.subtitle}>Entre com seu cadastro</Text>
-
-      <TextInput
-          style={styles.input}
-          placeholder="E-mail"
-          value={email}
-          onChangeText={(text) => { setEmail(text); if (errorMessage) setErrorMessage(''); }}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          editable={!loading}
-      />
-        <TextInput
-          style={styles.input}
-          placeholder="Senha"
-          value={password}
-          onChangeText={(text) => { setPassword(text); if (errorMessage) setErrorMessage(''); }}
-          secureTextEntry
-          editable={!loading}
+        <Image
+          source={require("../assets/logo_sece_minimalista.png")}
+          style={styles.logo}
+          resizeMode="contain"
         />
+
+        <Text style={styles.title}>Área de login</Text>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            style={styles.input}
+            value={email}
+            onChangeText={(text) => { setEmail(text); if (errorMessage) setErrorMessage(''); }}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            editable={!loading}
+          />
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>Senha</Text>
+          <TextInput
+            style={styles.input}
+            value={password}
+            onChangeText={(text) => { setPassword(text); if (errorMessage) setErrorMessage(''); }}
+            secureTextEntry
+            editable={!loading}
+          />
+        </View>
+
+        <TouchableOpacity
+          style={styles.forgotWrapper}
+          disabled={loading}
+          onPress={() =>
+            Alert.alert(
+              "Em breve",
+              "A recuperação de senha ainda não foi implementada."
+            )
+          }
+        >
+          <Text style={styles.forgotLink}>Esqueceu a senha?</Text>
+        </TouchableOpacity>
 
         {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
 
-        <View style={styles.footer}>
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#1a1a1a" />
+          ) : (
+            <Text style={styles.buttonText}>Login</Text>
+          )}
+        </TouchableOpacity>
 
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.buttonText}>Entrar</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => router.push("/cadastro")} disabled={loading}>
-            <Text style={styles.link}>Criar uma conta</Text>
-          </TouchableOpacity>
-      
-        </View>
       </View>
-
-  </View>
+    </View>
   );
 }
 
 
 const styles = StyleSheet.create({
- container: {
-  flex: 1,
-  backgroundColor: '#949494',
-  justifyContent: 'center',
-  alignItems: 'center' ,
-},
+  container: {
+    flex: 1,
+    backgroundColor: '#fafafa',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
 
-card: {
-  width: '100%',
-  maxWidth: 450,
-  minHeight: 370,
-  backgroundColor: '#eaeaea',
-  borderRadius: 10,
-  padding: 24,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
+  card: {
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+  },
 
-title: {
-  fontSize: 24,
-  fontWeight: '400',
-  color:'#202124',
-  textAlign: 'center',
-  marginBottom: 20,
-},
+  logo: {
+    width: 110,
+    height: 148,
+    marginBottom: 16,
+  },
 
-subtitle: {
-  fontSize: 15,
-  color: '#5f6368',
-  textAlign: 'center',
-  marginBottom: 32,
-},
+  title: {
+    fontFamily: 'serif',
+    fontSize: 20,
+    color: '#202124',
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+
+  field: {
+    width: '100%',
+    marginBottom: 16,
+  },
+
+  label: {
+    fontSize: 13,
+    color: '#3c3c3c',
+    marginBottom: 6,
+  },
+
   input: {
-    width: 350,
-    borderWidth: 2,
-    borderColor:'#a9aaac',
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#c9c9c9',
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 14,
-    fontSize: 16,
-    color:'#202124',
-    marginBottom: 12,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#202124',
+    backgroundColor: '#ffffff',
   },
+
+  forgotWrapper: {
+    width: '100%',
+    alignItems: 'flex-end',
+    marginBottom: 24,
+  },
+
+  forgotLink: {
+    fontSize: 12,
+    color: '#3c3c3c',
+  },
+
   errorText: {
-    width: 350,
+    width: '100%',
     color: '#c62828',
     fontSize: 13,
-    marginTop: -6,
-    marginBottom: 12,
+    marginTop: -12,
+    marginBottom: 16,
   },
-  footer: {
-    flex: 1,
-    alignItems: 'center',
-    marginTop: 8,
 
-  },
   button: {
-    backgroundColor: '#ed0000',
-    borderRadius: 6,
-    paddingHorizontal: 26,
-    paddingVertical: 14,
-    minWidth: 110,
+    width: '100%',
+    backgroundColor: '#8FC1A9',
+    borderRadius: 8,
+    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-  }, 
+  },
+
   buttonDisabled: {
     opacity: 0.7,
   },
+
   buttonText: {
-     color: '#ffffff',
+    color: '#1a1a1a',
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
   },
-    link: {
-    marginTop: 18,
-    fontSize: 14,
-    color: '#054fb0',
-    fontWeight: '500',
-  }
 });

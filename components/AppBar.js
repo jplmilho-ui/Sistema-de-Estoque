@@ -9,9 +9,8 @@ import { clearSession, getSession } from "../services/authStorage";
 const BASE_NAV_ITEMS = [
   { label: "Tela inicial", href: "/tela_inicial" },
   { label: "Estoque", href: "/estoque" },
-  { label: "Materiais", href: null },
-  { label: "Movimentações", href: null },
-  { label: "Histórico", href: null },
+  { label: "Materiais", href: "/materiais" },
+  { label: "Movimentações", href: "/movimentacoes" },
 ];
 
 export default function AppBar({ children }) {

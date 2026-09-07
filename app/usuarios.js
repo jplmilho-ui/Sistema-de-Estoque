@@ -330,7 +330,7 @@ export default function Usuarios() {
     <AppBar>
 
       <PageHeader
-        title="Gerenciar usuários"
+        title="Usuários"
 
         actions={
           <TouchableOpacity
