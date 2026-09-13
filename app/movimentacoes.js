@@ -41,7 +41,7 @@ export default function Movimentacoes() {
       const currentSession = await getSession();
 
       if (!currentSession?.token) {
-        router.replace("/login");
+        router.replace("/");
         return;
       }
 

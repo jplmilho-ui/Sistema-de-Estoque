@@ -24,6 +24,12 @@ import {
   deleteMaterial,
 } from "../services/materialApi";
 
+// Papéis que podem ver esta tela. Materiais é uma área administrativa:
+// só super_admin e admin (coordenador) cadastram/editam/inativam/excluem
+// tipos de material. Professor NÃO administra materiais — ele só
+// movimenta quantidade (adicionar/retirar) pela tela de Estoque.
+const PAPEIS_PERMITIDOS = ["super_admin", "admin"];
+
 const CATEGORIAS = ["EPI", "Uniforme", "Outro"];
 
 // Unidades de medida disponíveis no formulário. "Outro" libera um campo
@@ -32,7 +38,9 @@ const UNIDADES = ["Unidade", "Caixa", "Pacote", "Outro"];
 
 export default function Materiais() {
   // CONTROLE DE ACESSO
-  // (RF011-RF014 são requisitos do Administrador, então só admin entra aqui)
+  // Tela administrativa: cadastro dos tipos de material (visualizar,
+  // criar, editar, inativar, excluir). Só super_admin e admin acessam.
+  // Retirar/adicionar quantidade em estoque é feito na tela de Estoque.
 
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [session, setSession] = useState(null);
@@ -89,14 +97,14 @@ export default function Materiais() {
         const currentSession = await getSession();
 
         if (!currentSession?.token) {
-          router.replace("/login");
+          router.replace("/");
           return;
         }
 
-        if (currentSession.user?.role !== "admin") {
+        if (!PAPEIS_PERMITIDOS.includes(currentSession.user?.role)) {
           Alert.alert(
             "Acesso restrito",
-            "Essa área é só para administradores."
+            "Essa área é só para super administradores e administradores."
           );
           router.replace("/tela_inicial");
           return;
@@ -105,7 +113,7 @@ export default function Materiais() {
         setSession(currentSession);
       } catch (error) {
         console.error("Erro ao verificar acesso:", error);
-        router.replace("/login");
+        router.replace("/");
       } finally {
         setCheckingAccess(false);
       }
@@ -351,6 +359,11 @@ export default function Materiais() {
     (Number(quantidade) || 0) *
     (unidadeMedida === "Unidade" ? 1 : Number(fatorConversao) || 0);
 
+  // Super_admin e admin (coordenador) cadastram/editam/inativam/excluem
+  // material — os dois têm o mesmo nível de permissão nesta tela.
+  const isAdminLevel =
+    session?.user?.role === "admin" || session?.user?.role === "super_admin";
+
   // INTERFACE
 
   return (
@@ -358,19 +371,21 @@ export default function Materiais() {
       <PageHeader
         title="Materiais"
         actions={
-          <TouchableOpacity
-            style={styles.newButton}
-            onPress={() => {
-              if (formOpen) {
-                resetForm();
-              }
-              setFormOpen((open) => !open);
-            }}
-          >
-            <Text style={styles.newButtonText}>
-              {formOpen ? "Cancelar" : "+ Novo material"}
-            </Text>
-          </TouchableOpacity>
+          isAdminLevel ? (
+            <TouchableOpacity
+              style={styles.newButton}
+              onPress={() => {
+                if (formOpen) {
+                  resetForm();
+                }
+                setFormOpen((open) => !open);
+              }}
+            >
+              <Text style={styles.newButtonText}>
+                {formOpen ? "Cancelar" : "+ Novo material"}
+              </Text>
+            </TouchableOpacity>
+          ) : null
         }
       />
 
@@ -619,38 +634,44 @@ export default function Materiais() {
                   </View>
 
                   <View style={[styles.cell, styles.cellActions]}>
-                    <TouchableOpacity
-                      style={styles.actionButton}
-                      onPress={() => startEdit(material)}
-                    >
-                      <Text style={styles.actionButtonText}>Editar</Text>
-                    </TouchableOpacity>
+                    {isAdminLevel && (
+                      <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={() => startEdit(material)}
+                      >
+                        <Text style={styles.actionButtonText}>Editar</Text>
+                      </TouchableOpacity>
+                    )}
 
-                    <TouchableOpacity
-                      style={styles.actionButton}
-                      onPress={() => toggleActive(material)}
-                      disabled={updatingId === material.id}
-                    >
-                      {updatingId === material.id ? (
-                        <ActivityIndicator size="small" color="#5f6368" />
-                      ) : (
-                        <Text style={styles.actionButtonText}>
-                          {material.ativo ? "Inativar" : "Reativar"}
-                        </Text>
-                      )}
-                    </TouchableOpacity>
+                    {isAdminLevel && (
+                      <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={() => toggleActive(material)}
+                        disabled={updatingId === material.id}
+                      >
+                        {updatingId === material.id ? (
+                          <ActivityIndicator size="small" color="#5f6368" />
+                        ) : (
+                          <Text style={styles.actionButtonText}>
+                            {material.ativo ? "Inativar" : "Reativar"}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    )}
 
-                    <TouchableOpacity
-                      style={styles.deleteButton}
-                      onPress={() => confirmDelete(material)}
-                      disabled={deletingId === material.id}
-                    >
-                      {deletingId === material.id ? (
-                        <ActivityIndicator size="small" color="#ed0000" />
-                      ) : (
-                        <Text style={styles.deleteButtonText}>Excluir</Text>
-                      )}
-                    </TouchableOpacity>
+                    {isAdminLevel && (
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => confirmDelete(material)}
+                        disabled={deletingId === material.id}
+                      >
+                        {deletingId === material.id ? (
+                          <ActivityIndicator size="small" color="#ed0000" />
+                        ) : (
+                          <Text style={styles.deleteButtonText}>Excluir</Text>
+                        )}
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               );

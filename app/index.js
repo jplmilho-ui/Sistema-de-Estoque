@@ -1,13 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Image,
-  Alert,
+import {View,Text,TextInput,TouchableOpacity,StyleSheet,ActivityIndicator,Image,Alert,
 } from 'react-native';
 import { router } from "expo-router";
 import { loginUser } from "../services/authApi";

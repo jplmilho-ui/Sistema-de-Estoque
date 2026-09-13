@@ -6,12 +6,11 @@ import { clearSession, getSession } from "../services/authStorage";
 
 
 
-const BASE_NAV_ITEMS = [
-  { label: "Tela inicial", href: "/tela_inicial" },
-  { label: "Estoque", href: "/estoque" },
-  { label: "Materiais", href: "/materiais" },
-  { label: "Movimentações", href: "/movimentacoes" },
-];
+const NAV_TELA_INICIAL = { label: "Tela inicial", href: "/tela_inicial" };
+const NAV_ESTOQUE = { label: "Estoque", href: "/estoque" };
+const NAV_USUARIOS = { label: "Usuários", href: "/usuarios" };
+const NAV_MATERIAIS = { label: "Materiais", href: "/materiais" };
+const NAV_MOVIMENTACOES = { label: "Movimentações", href: "/movimentacoes" };
 
 export default function AppBar({ children }) {
   const pathname = usePathname();
@@ -26,16 +25,19 @@ export default function AppBar({ children }) {
     router.replace("/");
   }
 
-  // "Gerenciar usuários" só entra na lista pra quem é admin.
-  const navItems =
-    role === "admin"
-      ? [
-          BASE_NAV_ITEMS[0],
-          BASE_NAV_ITEMS[1],
-          { label: "Usuários", href: "/usuarios" },
-          ...BASE_NAV_ITEMS.slice(2),
-        ]
-      : BASE_NAV_ITEMS;
+  // "Materiais" é uma área administrativa: só super_admin e admin
+  // (coordenador) enxergam esse item no menu — professor não administra
+  // o cadastro de materiais, só movimenta quantidade pela tela de Estoque.
+  const isAdminLevel = role === "admin" || role === "super_admin";
+
+  const navItems = [
+    NAV_TELA_INICIAL,
+    NAV_ESTOQUE,
+    // "Usuários" também é exclusivo de admin/super_admin.
+    ...(isAdminLevel ? [NAV_USUARIOS] : []),
+    ...(isAdminLevel ? [NAV_MATERIAIS] : []),
+    NAV_MOVIMENTACOES,
+  ];
 
   return (
     <View style={styles.root}>
@@ -63,9 +65,8 @@ export default function AppBar({ children }) {
           {navItems.map((item) => {
             const active = item.href && pathname === item.href;
             return (
-              <View style={styles.side_buttons}>
+              <View key={item.label} style={styles.side_buttons}>
               <TouchableOpacity
-                key={item.label}
                 style={styles.navItem}
                 disabled={!item.href}
                 onPress={() => item.href && router.push(item.href)}

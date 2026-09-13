@@ -1,18 +1,16 @@
 // services/materialApi.js
 //
-// Ainda não existe backend para materiais, então este arquivo simula
-// as chamadas de API guardando os dados em memória (dentro do próprio
-// módulo). Os dados são perdidos sempre que o app recarrega.
+// Chamadas reais de CRUD de materiais + retirar/devolver estoque.
+// (Antes este arquivo simulava tudo em memória — agora conversa de
+// verdade com /materiais no backend.)
 //
-// Quando o backend estiver pronto, basta trocar o CONTEÚDO de cada
-// função por uma chamada fetch/axios de verdade. As telas que usam
-// este arquivo (materiais.js) não precisam mudar nada.
-//
-//   listMaterials(token)              -> { materials: [...] }
-//   createMaterial(token, dados)      -> { material: {...} }
-//   updateMaterial(token, id, dados)  -> { material: {...} }
-//   setMaterialActive(token, id, bool)-> { material: {...} }
-//   deleteMaterial(token, id)         -> { success: true }
+//   listMaterials(token)                    -> { materials: [...] }
+//   createMaterial(token, dados)            -> { material: {...} }
+//   updateMaterial(token, id, dados)        -> { material: {...} }
+//   setMaterialActive(token, id, bool)      -> { material: {...} }
+//   deleteMaterial(token, id)               -> null
+//   retirarMaterial(token, id, quantidade)  -> { material, movimentacao }
+//   devolverMaterial(token, id, quantidade) -> { material, movimentacao }
 //
 // MODELO DE QUANTIDADE POR UNIDADE DE MEDIDA
 // -------------------------------------------
@@ -22,159 +20,107 @@
 //                       (ex: 1 caixa = 50 unidades -> fatorConversao = 50)
 //   - quantidade:      quantas "unidadeMedida" existem em estoque
 //                       (ex: 4 caixas -> quantidade = 4)
-//   - quantidadeTotal: quantidade * fatorConversao, já calculado e salvo,
-//                       para facilitar comparações (ex: RF005 - reposição)
+//   - quantidadeTotal: quantidade * fatorConversao, calculado pelo backend.
 //
-// Quando unidadeMedida === "Unidade", fatorConversao é sempre 1, então
-// quantidade e quantidadeTotal acabam sendo o mesmo número.
+// "Retirar" e "colocar de volta" mexem na "quantidade" (na mesma unidade
+// mostrada na tela — ex: caixas), não direto no total em unidades.
 
-const SIMULATED_DELAY = 400; // ms, só para simular latência de rede
+import { API_URL } from "./api";
 
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function parseResponse(response) {
+  if (response.status === 204) {
+    return null;
+  }
+
+  let data = {};
+  try {
+    data = await response.json();
+  } catch (e) {
+    // resposta sem corpo JSON
+  }
+
+  if (!response.ok) {
+    throw new Error(data.error || "Não foi possível completar a operação.");
+  }
+
+  return data;
 }
 
-function generateId() {
-  return Math.random().toString(36).slice(2, 10);
-}
-
-// Recebe o que vier do formulário e devolve um objeto de material
-// já com os números normalizados e o total calculado.
-function normalizePayload(data) {
-  const unidadeMedida = data.unidadeMedida?.trim() || "Unidade";
-
-  // Se a unidade for "Unidade", não faz sentido ter fator de conversão,
-  // então forçamos 1 mesmo que o formulário mande outra coisa.
-  const fatorConversao =
-    unidadeMedida === "Unidade" ? 1 : Number(data.fatorConversao) || 1;
-
-  const quantidade = Number(data.quantidade) || 0;
-
+function authHeaders(token) {
   return {
-    nome: data.nome.trim(),
-    categoria: data.categoria,
-    unidadeMedida,
-    fatorConversao,
-    quantidade,
-    quantidadeTotal: quantidade * fatorConversao,
-    validade: data.validade?.trim() || "",
-    ca: data.ca?.trim() || "",
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
   };
 }
 
-// "Banco de dados" em memória, só para dar pra testar a tela.
-let materials = [
-  {
-    id: generateId(),
-    ...normalizePayload({
-      nome: "Luvas de procedimento",
-      categoria: "EPI",
-      unidadeMedida: "Caixa",
-      fatorConversao: 50, // 1 caixa = 50 unidades
-      quantidade: 4, // 4 caixas em estoque = 200 luvas
-      validade: "10/12/2026",
-      ca: "12345",
-    }),
-    ativo: true,
-  },
-  {
-    id: generateId(),
-    ...normalizePayload({
-      nome: "Jaleco",
-      categoria: "Uniforme",
-      unidadeMedida: "Unidade",
-      fatorConversao: 1,
-      quantidade: 15,
-      validade: "",
-      ca: "",
-    }),
-    ativo: true,
-  },
-  {
-    id: generateId(),
-    ...normalizePayload({
-      nome: "Máscara descartável",
-      categoria: "EPI",
-      unidadeMedida: "Caixa",
-      fatorConversao: 100, // 1 caixa = 100 unidades
-      quantidade: 0,
-      validade: "01/10/2026",
-      ca: "67890",
-    }),
-    ativo: false,
-  },
-];
+// params.ativo (opcional): true -> só materiais ativos (usado na tela de
+// Estoque); false -> só inativos; omitido -> todos (usado na tela de
+// Materiais, que precisa enxergar inativos também para poder reativar).
+export async function listMaterials(token, params = {}) {
+  const query = new URLSearchParams();
+  if (params.ativo !== undefined) {
+    query.set("ativo", String(params.ativo));
+  }
+  const queryString = query.toString();
 
-export async function listMaterials(token) {
-  await delay(SIMULATED_DELAY);
-  // Devolve uma cópia para evitar mutação acidental por fora do módulo
-  return { materials: materials.map((item) => ({ ...item })) };
+  const response = await fetch(
+    `${API_URL}/materiais${queryString ? `?${queryString}` : ""}`,
+    { headers: authHeaders(token) }
+  );
+  return parseResponse(response);
 }
 
 export async function createMaterial(token, data) {
-  await delay(SIMULATED_DELAY);
-
-  const newMaterial = {
-    id: generateId(),
-    ...normalizePayload(data),
-    ativo: true,
-  };
-
-  materials = [...materials, newMaterial];
-
-  return { material: newMaterial };
+  const response = await fetch(`${API_URL}/materiais`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+  return parseResponse(response);
 }
 
 export async function updateMaterial(token, id, data) {
-  await delay(SIMULATED_DELAY);
-
-  let updated = null;
-
-  materials = materials.map((item) => {
-    if (item.id !== id) return item;
-
-    updated = {
-      ...item,
-      ...normalizePayload(data),
-    };
-
-    return updated;
+  const response = await fetch(`${API_URL}/materiais/${id}`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
   });
-
-  if (!updated) {
-    throw new Error("Material não encontrado.");
-  }
-
-  return { material: updated };
+  return parseResponse(response);
 }
 
 export async function setMaterialActive(token, id, ativo) {
-  await delay(SIMULATED_DELAY);
-
-  let updated = null;
-
-  materials = materials.map((item) => {
-    if (item.id !== id) return item;
-    updated = { ...item, ativo };
-    return updated;
+  const response = await fetch(`${API_URL}/materiais/${id}/ativo`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ ativo }),
   });
-
-  if (!updated) {
-    throw new Error("Material não encontrado.");
-  }
-
-  return { material: updated };
+  return parseResponse(response);
 }
 
 export async function deleteMaterial(token, id) {
-  await delay(SIMULATED_DELAY);
+  const response = await fetch(`${API_URL}/materiais/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  return parseResponse(response);
+}
 
-  const exists = materials.some((item) => item.id === id);
-  if (!exists) {
-    throw new Error("Material não encontrado.");
-  }
+// Retirar item do estoque: super_admin, admin (coordenador) e professor.
+export async function retirarMaterial(token, id, quantidade) {
+  const response = await fetch(`${API_URL}/materiais/${id}/retirar`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ quantidade }),
+  });
+  return parseResponse(response);
+}
 
-  materials = materials.filter((item) => item.id !== id);
-
-  return { success: true };
+// Adicionar item ao estoque: super_admin, admin (coordenador) e professor.
+export async function devolverMaterial(token, id, quantidade) {
+  const response = await fetch(`${API_URL}/materiais/${id}/devolver`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ quantidade }),
+  });
+  return parseResponse(response);
 }

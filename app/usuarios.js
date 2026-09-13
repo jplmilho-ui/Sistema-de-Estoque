@@ -19,6 +19,33 @@ import {
 
 const SENHA_MINIMA = 8;
 
+// Rótulo e estilo exibidos na coluna "Tipo" pra cada papel possível.
+// Antes só existia "admin"/"user"; agora são 4 papéis.
+const ROLE_INFO = {
+  super_admin: { label: "Super admin", style: "roleBadgeSuperAdmin" },
+  admin: { label: "Administrador", style: "roleBadgeAdmin" },
+  professor: { label: "Professor", style: "roleBadgeProfessor" },
+  aluno: { label: "Aluno", style: "roleBadgeAluno" },
+};
+
+function getRoleInfo(role) {
+  return ROLE_INFO[role] || { label: role, style: "roleBadgeUser" };
+}
+
+// Quais papéis aparecem no formulário de criação, dependendo de quem
+// está logado. Super_admin pode criar admin também; admin não.
+const ROLE_OPTIONS_BY_CREATOR = {
+  super_admin: [
+    { value: "admin", label: "Administrador (coordenador)" },
+    { value: "professor", label: "Professor" },
+    { value: "aluno", label: "Aluno" },
+  ],
+  admin: [
+    { value: "professor", label: "Professor" },
+    { value: "aluno", label: "Aluno" },
+  ],
+};
+
 
 export default function Usuarios() {
 
@@ -60,8 +87,10 @@ export default function Usuarios() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // Função do usuário: user ou admin
-  const [role, setRole] = useState("user");
+  // Tipo de conta a criar (as opções dependem de quem está logado —
+  // ver ROLE_OPTIONS_BY_CREATOR) e RM (só usado quando role === "aluno")
+  const [newUserRole, setNewUserRole] = useState("");
+  const [rm, setRm] = useState("");
 
   // Erro específico do formulário
   const [formError, setFormError] = useState("");
@@ -89,18 +118,18 @@ export default function Usuarios() {
 
         // Se não existir token, o usuário não está logado
         if (!currentSession?.token) {
-          router.replace("/login");
+          router.replace("/");
           return;
         }
 
-        // Somente administradores podem acessar esta tela
-        if (currentSession.user?.role !== "admin") {
+        // Administradores e super_admin podem acessar esta tela
+        if (!["admin", "super_admin"].includes(currentSession.user?.role)) {
           Alert.alert(
             "Acesso restrito",
             "Essa área é só para administradores."
           );
 
-          router.replace("/dashboard");
+          router.replace("/tela_inicial");
           return;
         }
 
@@ -112,7 +141,7 @@ export default function Usuarios() {
         // Caso aconteça algum erro ao recuperar a sessão
         console.error("Erro ao verificar acesso:", error);
 
-        router.replace("/login");
+        router.replace("/");
 
       } finally {
 
@@ -168,6 +197,16 @@ export default function Usuarios() {
 
   }, [session, loadUsers]);
 
+  // Papéis que a pessoa logada tem permissão de criar, e o valor
+  // padrão selecionado no formulário (o primeiro da lista).
+  const roleOptions = ROLE_OPTIONS_BY_CREATOR[session?.user?.role] || [];
+
+  useEffect(() => {
+    if (session && !newUserRole && roleOptions.length > 0) {
+      setNewUserRole(roleOptions[0].value);
+    }
+  }, [session, roleOptions, newUserRole]);
+
 
   // RESETAR FORMULÁRIO
 
@@ -178,7 +217,8 @@ export default function Usuarios() {
     setEmail("");
     setPassword("");
     setConfirmPassword("");
-    setRole("user");
+    setRm("");
+    setNewUserRole(roleOptions[0]?.value || "");
     setFormError("");
   }
 
@@ -211,16 +251,30 @@ export default function Usuarios() {
       return;
     }
 
+    // Verifica se um tipo de conta válido foi escolhido
+    if (!newUserRole || !roleOptions.some((opt) => opt.value === newUserRole)) {
+      setFormError("Escolha o tipo de conta.");
+      return;
+    }
+
+    // Aluno precisa de RM
+    if (newUserRole === "aluno" && !rm.trim()) {
+      setFormError("Informe o RM do aluno.");
+      return;
+    }
+
     setSaving(true);
 
     try {
 
-      // Envia os dados para o backend
+      // Envia os dados para o backend — o backend confere de novo se
+      // quem está logado pode mesmo criar esse tipo de conta.
       await createUser(session.token, {
         name: name.trim(),
         email: email.trim(),
         password,
-        role,
+        role: newUserRole,
+        rm: newUserRole === "aluno" ? rm.trim() : undefined,
       });
 
       // Limpa o formulário
@@ -413,53 +467,40 @@ export default function Usuarios() {
             />
 
 
-            <Text style={styles.roleLabel}>
-              Tipo de conta
-            </Text>
-
+            <Text style={styles.roleLabel}>Tipo de conta</Text>
 
             <View style={styles.roleToggle}>
-
-              <TouchableOpacity
-                style={[
-                  styles.roleOption,
-                  role === "user" && styles.roleOptionActive,
-                ]}
-                onPress={() => setRole("user")}
-                disabled={saving}
-              >
-                <Text
+              {roleOptions.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
                   style={[
-                    styles.roleOptionText,
-                    role === "user" &&
-                      styles.roleOptionTextActive,
+                    styles.roleOption,
+                    newUserRole === option.value && styles.roleOptionActive,
                   ]}
+                  onPress={() => setNewUserRole(option.value)}
+                  disabled={saving}
                 >
-                  Usuário
-                </Text>
-              </TouchableOpacity>
-
-
-              <TouchableOpacity
-                style={[
-                  styles.roleOption,
-                  role === "admin" && styles.roleOptionActive,
-                ]}
-                onPress={() => setRole("admin")}
-                disabled={saving}
-              >
-                <Text
-                  style={[
-                    styles.roleOptionText,
-                    role === "admin" &&
-                      styles.roleOptionTextActive,
-                  ]}
-                >
-                  Administrador
-                </Text>
-              </TouchableOpacity>
-
+                  <Text
+                    style={[
+                      styles.roleOptionText,
+                      newUserRole === option.value && styles.roleOptionTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
+
+            {newUserRole === "aluno" && (
+              <TextInput
+                style={styles.input}
+                placeholder="RM do aluno"
+                value={rm}
+                onChangeText={setRm}
+                editable={!saving}
+              />
+            )}
 
 
             {!!formError && (
@@ -606,7 +647,7 @@ export default function Usuarios() {
                   style={styles.row}
                 >
 
-                  {/* Nome */}
+                  {/* Nome (e RM, se for aluno) */}
                   <Text
                     style={[
                       styles.cell,
@@ -615,6 +656,7 @@ export default function Usuarios() {
                     numberOfLines={1}
                   >
                     {user.name}
+                    {user.rm ? ` (RM ${user.rm})` : ""}
                   </Text>
 
 
@@ -641,15 +683,10 @@ export default function Usuarios() {
                     <Text
                       style={[
                         styles.roleBadge,
-
-                        user.role === "admin"
-                          ? styles.roleBadgeAdmin
-                          : styles.roleBadgeUser,
+                        styles[getRoleInfo(user.role).style],
                       ]}
                     >
-                      {user.role === "admin"
-                        ? "Administrador"
-                        : "Usuário"}
+                      {getRoleInfo(user.role).label}
                     </Text>
 
                   </View>
@@ -775,6 +812,7 @@ const styles = StyleSheet.create({
   },
   roleToggle: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
     marginBottom: 16,
   },
@@ -786,17 +824,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: "#ffffff",
   },
-
   roleOptionActive: {
     borderColor: "#ed0000",
     backgroundColor: "#fff0f0",
   },
-
   roleOptionText: {
     fontSize: 13,
     color: "#5f6368",
   },
-
   roleOptionTextActive: {
     color: "#ed0000",
     fontWeight: "600",
@@ -883,6 +918,21 @@ const styles = StyleSheet.create({
   roleBadgeAdmin: {
     backgroundColor: "#fde8e8",
     color: "#c62828",
+  },
+
+  roleBadgeSuperAdmin: {
+    backgroundColor: "#f3e8fd",
+    color: "#6a1b9a",
+  },
+
+  roleBadgeProfessor: {
+    backgroundColor: "#e6f4ea",
+    color: "#1b4a3b",
+  },
+
+  roleBadgeAluno: {
+    backgroundColor: "#fff4e0",
+    color: "#8a5a00",
   },
 
   roleBadgeUser: {

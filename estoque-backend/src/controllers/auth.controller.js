@@ -12,43 +12,22 @@ const SENHA_MINIMA = 8;
 // VERIFICAÇÃO DE ERROS
 
 //FUNÇÃO QUE REGISTRA O USUÁRIO
-async function register(req, res)  { 
-  try {
-    const { name, email, password } = req.body;
-
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Nome, email e senha são obrigatórios.' });
-    }
-
-    if (password.length < SENHA_MINIMA) {
-      return res.status(400).json({
-        error: `A senha precisa ter pelo menos ${SENHA_MINIMA} caracteres.`,
-      });
-    }
-  //Verifica se existe um usuário com o email colocado
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return res.status(409).json({ error: 'Já existe um usuário com esse email.' });
-    }
-
-
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Quem se cadastra sozinho pela tela pública sempre entra como "user".
-    // Só um admin já existente pode promover alguém a admin, pela tela
-    // de Gerenciar usuários (rota protegida /users).
-    const user = await prisma.user.create({
-      data: { name, email, password: hashedPassword, role: 'user' },
-    });
-
-    const { password: _senha, ...userWithoutPassword } = user;
-
-    return res.status(201).json({ user: userWithoutPassword });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'Erro ao criar usuário.' });
-  }
+async function register(req, res)  {
+  // Cadastro público DESATIVADO.
+  //
+  // Esta função criava contas sempre com role: 'user' — mas esse valor
+  // não existe mais no enum Role (agora é super_admin/admin/professor/
+  // aluno), então essa rota quebrava com erro 500 a cada chamada.
+  //
+  // Além do bug, faz sentido esse endpoint deixar de existir de verdade:
+  // com a hierarquia super_admin -> admin -> professor -> aluno, toda
+  // conta precisa nascer com um papel explícito, escolhido por alguém
+  // já autenticado e acima na hierarquia (rota protegida /users) — não
+  // faz mais sentido alguém se cadastrar sozinho, sem dono, pela tela
+  // pública (que, inclusive, já foi removida do app).
+  return res.status(410).json({
+    error: 'Cadastro público desativado. Peça para um administrador criar sua conta.',
+  });
 }
 
 async function login(req, res) {

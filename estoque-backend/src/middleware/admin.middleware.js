@@ -7,10 +7,14 @@ async function adminMiddleware(req, res, next) {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.userId } });
 
-    if (!user || user.role !== 'admin') {
+    // super_admin está acima do admin na hierarquia, então também
+    // passa por aqui — sem isso, o próprio super_admin ficava travado
+    // fora das rotas de gerenciamento de usuários.
+    if (!user || !['admin', 'super_admin'].includes(user.role)) {
       return res.status(403).json({ error: 'Acesso restrito a administradores.' });
     }
 
+    req.userRole = user.role;
     return next();
   } catch (error) {
     console.error(error);
