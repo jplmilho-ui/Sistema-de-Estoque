@@ -10,7 +10,7 @@ import {
   Alert,
 } from "react-native";
 import { router } from "expo-router";
-
+import { confirmAction } from "../utils/confirmAction";
 import AppBar from "../components/AppBar";
 import PageHeader from "../components/PageHeader";
 
@@ -296,19 +296,13 @@ export default function Materiais() {
   // RF012 - EXCLUIR MATERIAL (permanente)
 
   function confirmDelete(material) {
-    Alert.alert(
-      "Excluir material",
-      `Tem certeza que quer excluir "${material.nome}"? Essa ação não pode ser desfeita.`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Excluir",
-          style: "destructive",
-          onPress: () => handleDelete(material.id),
-        },
-      ]
-    );
-  }
+  confirmAction({
+    title: "Excluir material",
+    message: `Tem certeza que quer excluir "${material.nome}"? Essa ação não pode ser desfeita.`,
+    confirmText: "Excluir",
+    onConfirm: () => handleDelete(material.id),
+  });
+}
 
   async function handleDelete(id) {
     setDeletingId(id);

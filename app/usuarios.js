@@ -5,6 +5,7 @@ import { router } from "expo-router";
 
 import AppBar from "../components/AppBar";
 import PageHeader from "../components/PageHeader";
+import { confirmAction } from "../utils/confirmAction";
 
 
 import { getSession } from "../services/authStorage";
@@ -304,30 +305,15 @@ export default function Usuarios() {
 
 
   function confirmDelete(user) {
+  confirmAction({
+    title: "Excluir usuário",
+    message: `Tem certeza que quer excluir "${user.name}"? Essa ação não pode ser desfeita.`,
+    confirmText: "Excluir",
+    onConfirm: () => handleDelete(user.id),
+  });
+}
 
-    Alert.alert(
-      "Excluir usuário",
 
-      `Tem certeza que quer excluir "${user.name}"? Essa ação não pode ser desfeita.`,
-
-      [
-        // Botão cancelar
-        {
-          text: "Cancelar",
-          style: "cancel",
-        },
-
-        // Botão excluir
-        {
-          text: "Excluir",
-          style: "destructive",
-
-          // Só executa a exclusão depois da confirmação
-          onPress: () => handleDelete(user.id),
-        },
-      ]
-    );
-  }
 
 
 
