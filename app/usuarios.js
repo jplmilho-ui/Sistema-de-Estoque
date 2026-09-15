@@ -19,6 +19,8 @@ import {
 
 
 const SENHA_MINIMA = 8;
+const EMAIL_MINIMO = 8;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Rótulo e estilo exibidos na coluna "Tipo" pra cada papel possível.
 // Antes só existia "admin"/"user"; agora são 4 papéis.
@@ -235,6 +237,16 @@ export default function Usuarios() {
     // Verifica campos obrigatórios
     if (!name.trim() || !email.trim() || !password || !confirmPassword) {
       setFormError("Preencha todos os campos.");
+      return;
+    }
+
+    // Verifica tamanho mínimo e formato do e-mail
+    if (email.trim().length < EMAIL_MINIMO) {
+      setFormError(`O e-mail precisa ter pelo menos ${EMAIL_MINIMO} caracteres.`);
+      return;
+    }
+    if (!EMAIL_REGEX.test(email.trim())) {
+      setFormError("Informe um e-mail válido.");
       return;
     }
 
@@ -625,6 +637,14 @@ export default function Usuarios() {
               const isSelf =
                 user.id === session?.user?.id;
 
+              // Admin comum não pode excluir outro admin nem o
+              // super_admin — só o super_admin tem esse alcance.
+              // (O backend também barra isso; aqui é só pra nem
+              // mostrar o botão como clicável nesses casos.)
+              const semPermissaoParaExcluir =
+                session?.user?.role === "admin" &&
+                ["admin", "super_admin"].includes(user.role);
+
 
               return (
 
@@ -691,8 +711,9 @@ export default function Usuarios() {
                         styles.deleteButton,
 
                         // Desabilita visualmente
-                        // se for o próprio usuário.
-                        isSelf &&
+                        // se for o próprio usuário
+                        // ou se não tiver permissão.
+                        (isSelf || semPermissaoParaExcluir) &&
                           styles.buttonDisabled,
                       ]}
 
@@ -701,8 +722,10 @@ export default function Usuarios() {
                       }
 
                       // Não permite excluir a própria conta
+                      // nem quem está fora do alcance da hierarquia.
                       disabled={
                         isSelf ||
+                        semPermissaoParaExcluir ||
                         deletingId === user.id
                       }
                     >

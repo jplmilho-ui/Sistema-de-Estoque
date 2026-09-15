@@ -221,6 +221,24 @@ export default function Materiais() {
       }
     }
 
+    // Valida a data de validade (se preenchida), pra pegar erro de
+    // digitação (ex: "1500" em vez do ano certo) antes de mandar pro
+    // backend — a mesma regra é checada de novo lá, por segurança.
+    if (validade.trim()) {
+      const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(validade.trim());
+      if (!match) {
+        return "Data de validade inválida. Use o formato dd/mm/aaaa.";
+      }
+      const [, dia, mes, ano] = match.map(Number);
+      const anoAtual = new Date().getFullYear();
+      if (ano < 1900 || ano > anoAtual + 100) {
+        return `Ano de validade inválido (${ano}). Confira a data digitada.`;
+      }
+      if (mes < 1 || mes > 12 || dia < 1 || dia > 31) {
+        return "Data de validade inválida. Confira dia e mês.";
+      }
+    }
+
     return null;
   }
 
@@ -495,7 +513,7 @@ export default function Materiais() {
 
             <TextInput
               style={styles.input}
-              placeholder="Data de validade (opcional)"
+              placeholder="Data de validade (opcional) — dd/mm/aaaa"
               value={validade}
               onChangeText={setValidade}
               editable={!saving}

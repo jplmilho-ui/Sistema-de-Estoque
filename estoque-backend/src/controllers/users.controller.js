@@ -2,6 +2,20 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../lib/prisma');
 
 const SENHA_MINIMA = 8;
+const EMAIL_MINIMO = 8;
+// Checagem simples de formato (algo@algo.algo) — não cobre todo caso
+// de e-mail válido que existe, mas barra o óbvio (sem "@", sem domínio).
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function validarEmail(email) {
+  if (!email || email.trim().length < EMAIL_MINIMO) {
+    return `O e-mail precisa ter pelo menos ${EMAIL_MINIMO} caracteres.`;
+  }
+  if (!EMAIL_REGEX.test(email.trim())) {
+    return 'Informe um e-mail válido.';
+  }
+  return null;
+}
 
 async function listUsers(req, res) {
   try {
@@ -30,6 +44,11 @@ async function createUser(req, res) {
 
     if (!name || !email || !password || !role) {
       return res.status(400).json({ error: 'Nome, email, senha e tipo de conta são obrigatórios.' });
+    }
+
+    const erroEmail = validarEmail(email);
+    if (erroEmail) {
+      return res.status(400).json({ error: erroEmail });
     }
 
     if (password.length < SENHA_MINIMA) {
@@ -106,6 +125,16 @@ async function deleteUser(req, res) {
     const existingUser = await prisma.user.findUnique({ where: { id } });
     if (!existingUser) {
       return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    // Admin comum não pode excluir outro admin nem o super_admin — só o
+    // super_admin tem esse alcance. Sem essa checagem, um admin qualquer
+    // conseguia remover até o super_admin, o que não faz sentido dentro
+    // da hierarquia (super_admin -> admin -> professor -> aluno).
+    if (req.userRole === 'admin' && ['admin', 'super_admin'].includes(existingUser.role)) {
+      return res.status(403).json({
+        error: 'Um administrador não pode excluir outro administrador ou o super admin.',
+      });
     }
 
     await prisma.user.delete({ where: { id } });

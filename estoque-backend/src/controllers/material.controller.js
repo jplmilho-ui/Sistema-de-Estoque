@@ -80,6 +80,22 @@ function validatePayload(body) {
   ) {
     return 'Quantidade precisa ser um número válido.';
   }
+
+  // Bloqueia datas absurdas (ex: "1500", digitado por engano em vez de
+  // "2500" ou de um ano de verdade). Não exige que seja uma data futura
+  // — só que esteja num intervalo plausível pra uma validade de material.
+  if (body.validade && body.validade.trim()) {
+    const dataValidade = parseDataBR(body.validade);
+    if (!dataValidade) {
+      return 'Data de validade inválida. Use o formato dd/mm/aaaa.';
+    }
+    const ano = dataValidade.getUTCFullYear();
+    const anoAtual = new Date().getUTCFullYear();
+    if (ano < 1900 || ano > anoAtual + 100) {
+      return `Ano de validade inválido (${ano}). Confira a data digitada.`;
+    }
+  }
+
   return null;
 }
 

@@ -82,6 +82,11 @@ export default function Estoque() {
   const [selectedId, setSelectedId] = useState(null);
 
   // ---------------------------------------------------------
+  // BUSCA (filtra a lista pelo nome, categoria ou C.A digitado)
+  // ---------------------------------------------------------
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // ---------------------------------------------------------
   // MODAL DE ADICIONAR / RETIRAR QUANTIDADE
   // ---------------------------------------------------------
   // Quando preenchido, mostra o modal: { tipo: "adicionar" | "retirar" }
@@ -160,6 +165,16 @@ export default function Estoque() {
   }
 
   const selectedMaterial = materials.find((item) => item.id === selectedId) || null;
+
+  // Filtra por nome, categoria ou C.A — sem diferenciar maiúsculas/minúsculas.
+  const termoBusca = searchTerm.trim().toLowerCase();
+  const filteredMaterials = termoBusca
+    ? materials.filter((material) =>
+        [material.nome, material.categoria, material.ca]
+          .filter(Boolean)
+          .some((campo) => campo.toLowerCase().includes(termoBusca))
+      )
+    : materials;
 
   // ABRIR O MODAL DE ADICIONAR/RETIRAR
   //
@@ -254,7 +269,11 @@ export default function Estoque() {
               <Text style={styles.addButtonText}>+ Adicionar item</Text>
             </TouchableOpacity>
 
-            <SearchBox />
+            <SearchBox
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+              placeholder="Buscar material..."
+            />
           </>
         }
       />
@@ -294,10 +313,21 @@ export default function Estoque() {
             </View>
           )}
 
-          {/* Itens em estoque (só materiais ativos) */}
           {!loadingList &&
             !listError &&
-            materials.map((material) => {
+            materials.length > 0 &&
+            filteredMaterials.length === 0 && (
+              <View style={styles.centerBox}>
+                <Text style={styles.emptyText}>
+                  Nenhum material encontrado para "{searchTerm}".
+                </Text>
+              </View>
+            )}
+
+          {/* Itens em estoque (só materiais ativos, filtrados pela busca) */}
+          {!loadingList &&
+            !listError &&
+            filteredMaterials.map((material) => {
               const selected = material.id === selectedId;
               return (
                 <TouchableOpacity

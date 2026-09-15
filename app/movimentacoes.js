@@ -35,6 +35,9 @@ export default function Movimentacoes() {
 
   const [filtro, setFiltro] = useState("todas");
 
+  // Busca por nome do material ou responsável.
+  const [searchTerm, setSearchTerm] = useState("");
+
   // Garante que existe uma sessão ativa antes de mostrar a tela
   useEffect(() => {
     async function verifySession() {
@@ -79,10 +82,19 @@ export default function Movimentacoes() {
     return null;
   }
 
-  const movimentacoesFiltradas =
+  const movimentacoesPorTipo =
     filtro === "todas"
       ? movimentacoes
       : movimentacoes.filter((item) => item.tipo === filtro);
+
+  const termoBusca = searchTerm.trim().toLowerCase();
+  const movimentacoesFiltradas = termoBusca
+    ? movimentacoesPorTipo.filter((item) =>
+        [item.materialNome, item.responsavel]
+          .filter(Boolean)
+          .some((campo) => campo.toLowerCase().includes(termoBusca))
+      )
+    : movimentacoesPorTipo;
 
   return (
     <AppBar>
@@ -90,7 +102,11 @@ export default function Movimentacoes() {
         title="Movimentações"
         actions={
           <>
-            <SearchBox />
+            <SearchBox
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+              placeholder="Buscar por material ou responsável..."
+            />
           </>
         }
       />
@@ -162,7 +178,9 @@ export default function Movimentacoes() {
               movimentacoesFiltradas.length === 0 && (
                 <View style={styles.centerBox}>
                   <Text style={styles.emptyText}>
-                    Nenhuma movimentação encontrada.
+                    {searchTerm.trim()
+                      ? `Nenhuma movimentação encontrada para "${searchTerm}".`
+                      : "Nenhuma movimentação encontrada."}
                   </Text>
                 </View>
               )}
