@@ -9,6 +9,7 @@ const {
   deleteMaterial,
   retirar,
   devolver,
+  resumo,
 } = require('../controllers/material.controller');
 
 const router = express.Router();
@@ -21,6 +22,12 @@ router.use(authMiddleware);
 // super_admin/admin; professor só usa esses dados pela tela de Estoque,
 // que reaproveita esse mesmo endpoint com ?ativo=true).
 router.get('/', allowRoles('super_admin', 'admin', 'professor'), listMaterials);
+
+// Resumo pra Tela Inicial (Produtos Cadastrados / Divergências / Itens
+// Auditados). Sem restrição de papel — qualquer pessoa logada que caia
+// na Tela Inicial precisa desses números, e nenhum dado sensível é
+// exposto aqui (só contagens).
+router.get('/resumo', resumo);
 
 // Cadastrar, editar, ativar/inativar e excluir: super_admin e admin
 // (coordenador). Professor NÃO administra o cadastro de materiais.

@@ -105,7 +105,7 @@ export default function Movimentacoes() {
             <SearchBox
               value={searchTerm}
               onChangeText={setSearchTerm}
-              placeholder="Buscar por material ou responsável..."
+              placeholder="Buscar material/responsável"
             />
           </>
         }

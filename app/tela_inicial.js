@@ -1,86 +1,124 @@
-import { useEffect, useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
 import { router } from "expo-router";
 import AppBar from "../components/AppBar";
 import PageHeader from "../components/PageHeader";
-import SearchBox from "../components/SearchBox";
 import { getSession } from "../services/authStorage";
+import { getResumo } from "../services/materialApi";
 
 export default function tela_inicial() {
   const [checkingSession, setCheckingSession] = useState(true);
+  const [session, setSession] = useState(null);
+
+  // Números reais do resumo (antes eram fixos: 5, 3, 1).
+  const [resumo, setResumo] = useState(null);
+  const [loadingResumo, setLoadingResumo] = useState(true);
+  const [resumoError, setResumoError] = useState("");
 
   useEffect(() => {
     async function verifySession() {
-      const { token } = await getSession();
-      if (!token) {
-        router.replace("/login");
+      const currentSession = await getSession();
+      if (!currentSession?.token) {
+        router.replace("/");
         return;
       }
+      setSession(currentSession);
       setCheckingSession(false);
     }
     verifySession();
   }, []);
 
+  const loadResumo = useCallback(async (token) => {
+    setLoadingResumo(true);
+    setResumoError("");
+    try {
+      const data = await getResumo(token);
+      setResumo(data);
+    } catch (error) {
+      console.error("Erro ao carregar resumo:", error);
+      setResumoError(error?.message || "Não foi possível carregar os números.");
+    } finally {
+      setLoadingResumo(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (session?.token) {
+      loadResumo(session.token);
+    }
+  }, [session, loadResumo]);
+
   if (checkingSession) {
     return null;
   }
 
+  const proximosDaValidade = resumo?.proximosDaValidade ?? 0;
+
   return (
     <AppBar>
-      <PageHeader
-        title="Tela Inicial"
-        actions={
-          <>
-          
-
-
-            <SearchBox />
-          </>
-        }
-      />
+      <PageHeader title="Tela Inicial" />
       <View style={styles.Space}>
-  <View style={styles.contentArea}>
+        <View style={styles.contentArea}>
 
-    {/* Aviso de validação */}
-    <View style={styles.validationRow}>
-      <View style={styles.validationMessage}>
-        <Text style={styles.validationText}>
-          Você possui 3 itens próximos da validação!
-        </Text>
+          {/* Aviso de validação */}
+          {!loadingResumo && !resumoError && proximosDaValidade > 0 && (
+            <View style={styles.validationRow}>
+              <View style={styles.validationMessage}>
+                <Text style={styles.validationText}>
+                  Você possui {proximosDaValidade}{" "}
+                  {proximosDaValidade === 1 ? "item" : "itens"} próximos da validade!
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.verificarButton}
+                onPress={() => router.push("/estoque")}
+              >
+                <Text style={styles.verificarText}>Verificar</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {!!resumoError && (
+            <View style={styles.validationRow}>
+              <Text style={styles.errorText}>{resumoError}</Text>
+            </View>
+          )}
+
+          {/* Cards */}
+          <View style={styles.cardsContainer}>
+
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Produtos Cadastrados</Text>
+              {loadingResumo ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.cardNumber}>{resumo?.totalCadastrados ?? "—"}</Text>
+              )}
+            </View>
+
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Itens Auditados</Text>
+              {loadingResumo ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.cardNumber}>{resumo?.auditados ?? "—"}</Text>
+              )}
+            </View>
+
+            <View style={[styles.card, { backgroundColor: "#C86756" }]}>
+              <Text style={styles.cardTitle}>Divergências</Text>
+              {loadingResumo ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.cardNumber}>{resumo?.divergencias ?? "—"}</Text>
+              )}
+            </View>
+
+          </View>
+
+        </View>
       </View>
-
-      <TouchableOpacity style={styles.verificarButton}>
-        <Text style={styles.verificarText}>Verificar</Text>
-      </TouchableOpacity>
-    </View>
-
-    {/* Cards */}
-    <View style={styles.cardsContainer}>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Produtos Cadastrados</Text>
-        <Text style={styles.cardNumber}>5</Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Itens Auditados</Text>
-        <Text style={styles.cardNumber}>3</Text>
-      </View>
-
-      <View style={[styles.card ,{backgroundColor: "#C86756"}]}>
-        <Text style={styles.cardTitle}>Divergências</Text>
-        <Text style={styles.cardNumber}>1</Text>
-      </View>
-
-    </View>
-
-  </View>
-</View>   
-     
-          
-      
-
-      
     </AppBar>
   );
 }
@@ -131,6 +169,11 @@ const styles = StyleSheet.create({
   validationText: {
     fontSize: 14,
     color: "#1a1a1a",
+  },
+
+  errorText: {
+    fontSize: 13,
+    color: "#c62828",
   },
 
   verificarButton: {

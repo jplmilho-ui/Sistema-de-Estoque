@@ -331,6 +331,59 @@ async function devolver(req, res) {
   }
 }
 
+// ---------------------------------------------------------------
+// RESUMO — números reais pra Tela Inicial (antes eram fixos: 5, 3, 1).
+//
+//   totalCadastrados   -> quantos materiais existem no sistema (ativos
+//                         e inativos — "cadastrados" conta todo mundo).
+//   divergencias       -> materiais ATIVOS cuja validade já passou
+//                         ("itens fora da validade").
+//   proximosDaValidade -> materiais ATIVOS que ainda não venceram, mas
+//                         vencem nos próximos 30 dias (o aviso do topo
+//                         da Tela Inicial).
+//   auditados          -> materiais ATIVOS que já tiveram pelo menos
+//                         uma movimentação (retirada ou devolução)
+//                         registrada — ou seja, já foram conferidos
+//                         pelo menos uma vez no sistema. Não existe
+//                         ainda um recurso de "marcar como auditado";
+//                         essa é a aproximação mais razoável com o que
+//                         já existe. Se a intenção for outra (um botão
+//                         de "auditar" separado, por exemplo), dá pra
+//                         trocar essa regra facilmente.
+// ---------------------------------------------------------------
+
+async function resumo(req, res) {
+  try {
+    const hoje = new Date();
+    hoje.setUTCHours(0, 0, 0, 0);
+
+    const em30Dias = new Date(hoje);
+    em30Dias.setUTCDate(em30Dias.getUTCDate() + 30);
+
+    const [totalCadastrados, divergencias, proximosDaValidade, auditados] =
+      await Promise.all([
+        prisma.material.count(),
+        prisma.material.count({
+          where: { ativo: true, validade: { not: null, lt: hoje } },
+        }),
+        prisma.material.count({
+          where: {
+            ativo: true,
+            validade: { not: null, gte: hoje, lte: em30Dias },
+          },
+        }),
+        prisma.material.count({
+          where: { ativo: true, movimentacoes: { some: {} } },
+        }),
+      ]);
+
+    return res.json({ totalCadastrados, divergencias, proximosDaValidade, auditados });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Erro ao buscar resumo do estoque.' });
+  }
+}
+
 module.exports = {
   listMaterials,
   createMaterial,
@@ -339,6 +392,7 @@ module.exports = {
   deleteMaterial,
   retirar,
   devolver,
+  resumo,
   // exportados só para o movimentacao.controller.js reaproveitar a formatação
   formatDataHoraBR,
 };

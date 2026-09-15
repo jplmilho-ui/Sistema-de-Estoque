@@ -124,3 +124,11 @@ export async function devolverMaterial(token, id, quantidade) {
   });
   return parseResponse(response);
 }
+
+// Resumo pra Tela Inicial: { totalCadastrados, divergencias, proximosDaValidade, auditados }
+export async function getResumo(token) {
+  const response = await fetch(`${API_URL}/materiais/resumo`, {
+    headers: authHeaders(token),
+  });
+  return parseResponse(response);
+}
