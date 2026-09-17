@@ -1,11 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
+import {View,Text,TouchableOpacity,StyleSheet,ScrollView,ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
 

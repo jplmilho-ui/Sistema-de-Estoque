@@ -1,19 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-} from "react-native";
+import {View,Text,TextInput,TouchableOpacity,StyleSheet,ScrollView,ActivityIndicator,Alert,} from "react-native";
 import { router } from "expo-router";
 import { confirmAction } from "../utils/confirmAction";
 import AppBar from "../components/AppBar";
 import PageHeader from "../components/PageHeader";
-
+import SearchBox from "../components/SearchBox";
 import { getSession } from "../services/authStorage";
 
 import {
@@ -241,6 +232,7 @@ export default function Materiais() {
 
     return null;
   }
+    const [searchTerm, setSearchTerm] = useState("");
 
   // SALVAR (CRIA UM NOVO OU ATUALIZA O QUE ESTIVER EM EDIÇÃO)
 
@@ -379,11 +371,18 @@ export default function Materiais() {
   // INTERFACE
 
   return (
-    <AppBar>
-      <PageHeader
-        title="Materiais"
-        actions={
-          isAdminLevel ? (
+  <AppBar>
+    <PageHeader
+      title="Materiais"
+      actions={
+        <>
+          <SearchBox
+            value={searchTerm}
+            onChangeText={setSearchTerm}
+            placeholder="Buscar material..."
+          />
+
+          {isAdminLevel ? (
             <TouchableOpacity
               style={styles.newButton}
               onPress={() => {
@@ -397,9 +396,13 @@ export default function Materiais() {
                 {formOpen ? "Cancelar" : "+ Novo material"}
               </Text>
             </TouchableOpacity>
-          ) : null
-        }
-      />
+          ) : null}
+        </>
+      }
+    />
+
+
+
 
       <ScrollView
         style={styles.space}

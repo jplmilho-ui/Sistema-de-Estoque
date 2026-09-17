@@ -21,13 +21,3 @@ Adição da tela de Materiais.
 Atualização do design da tela de Login.
 Remoção da tela de Cadastro.
 O cadastro de pessoas será realizado pela equipe responsável pelo sistema.
-
-
-
-.env: 
-DATABASE_URL="postgresql://postgres.zvgccvinriwcxlgnkgba:etecamp_2026@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&sslmode=require"
-
-DIRECT_URL="postgresql://postgres:etecamp_2026@db.zvgccvinriwcxlgnkgba.supabase.co:5432/postgres?sslmode=require"
-
-JWT_SECRET="d725be9745329b0bbbb2856746452caf1a14729a4ab63ce75266c9d95b6387d"
-PORT=3333
