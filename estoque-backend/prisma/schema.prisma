@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+// ---------------------------------------------------------------
+// Hierarquia do sistema:
+//   super_admin -> admin (coordenador) -> professor -> aluno
+//
+// - super_admin: único que pode criar contas de admin.
+// - admin (coordenador): cria/gerencia professores e materiais.
+// - professor: cria/gerencia alunos; confirma solicitações de item.
+// - aluno: loga com RM + email + senha; só vai poder solicitar itens
+//   (tela ainda não existe — fica pra depois).
+// ---------------------------------------------------------------
+enum Role {
+  super_admin
+  admin
+  professor
+  aluno
+}
+
+model User {
+  id       Int    @id @default(autoincrement())
+  name     String
+  email    String @unique
+  password String
+  role     Role   // agora obrigatório, sem valor padrão — toda conta
+
+  // precisa nascer com um papel explícito, escolhido por quem a criou.
+
+  // Só é preenchido para quem é aluno (Registro do Aluno / matrícula).
+  rm String? @unique
+
+  // Quem criou/gerencia esta conta:
+  //   super_admin -> criou o admin
+  //   admin       -> criou o professor
+  //   professor   -> criou o aluno
+  // Fica nulo só pro(s) super_admin(s), que não têm "dono".
+  criadoPorId Int?
+  criadoPor   User?  @relation("HierarquiaUsuarios", fields: [criadoPorId], references: [id])
+  gerenciados User[] @relation("HierarquiaUsuarios")
+
+  createdAt DateTime @default(now())
+
+  materiaisCriados         Material[]
+  movimentacoesRegistradas Movimentacao[]
+}
+
+model Material {
+  id              Int       @id @default(autoincrement())
+  nome            String
+  categoria       String    // "EPI" | "Uniforme" | "Outro"
+  unidadeMedida   String    // "Unidade" | "Caixa" | "Pacote" ou nome customizado
+  fatorConversao  Int       @default(1)
+  quantidade      Int       @default(0)
+  quantidadeTotal Int       @default(0)
+  validade        DateTime? @db.Date
+  ca              String?
+  ativo           Boolean   @default(true)
+
+  // Quem cadastrou o material (normalmente um admin/coordenador).
+  criadoPorId Int?
+  criadoPor   User? @relation(fields: [criadoPorId], references: [id])
+
+  movimentacoes Movimentacao[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Histórico de entradas (colocar de volta) e saídas (retirar) de estoque.
+// Cada ação de retirar/devolver em um Material cria um registro aqui,
+// guardando quem fez (responsavel) e quando (createdAt).
+enum TipoMovimentacao {
+  entrada
+  saida
+}
+
+model Movimentacao {
+  id         Int              @id @default(autoincrement())
+  tipo       TipoMovimentacao
+  quantidade Int
+
+  materialId Int
+  // Restrict: não deixa excluir um Material que já tem movimentações
+  // (o controller trata esse erro e orienta a inativar em vez de excluir).
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+
+  responsavelId Int
+  // Restrict: não deixa excluir um usuário que já registrou movimentações
+  // (preserva o histórico de quem mexeu no estoque).
+  responsavel   User @relation(fields: [responsavelId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+}
