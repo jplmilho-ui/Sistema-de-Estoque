@@ -9,8 +9,13 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
+// Import direto no build de navegador do exceljs: o pacote também tem uma
+// versão pra Node (com fs/stream de verdade) que o Metro não consegue
+// empacotar pra web. Esse caminho aponta pro bundle pronto pro navegador.
+import ExcelJS from "exceljs/dist/exceljs.min.js";
 
 import AppBar from "../components/AppBar";
 import PageHeader from "../components/PageHeader";
@@ -18,6 +23,7 @@ import SearchBox from "../components/SearchBox";
 
 import { getSession } from "../services/authStorage";
 import { listMaterials, retirarMaterial, devolverMaterial } from "../services/materialApi";
+import { isVencido } from "../utils/validade";
 
 // Papéis que podem ver e movimentar o Estoque. Diferente da tela de
 // Materiais (administrativa), aqui super_admin, admin e professor podem
@@ -64,6 +70,17 @@ function cellValue(material, key) {
 }
 
 export default function Estoque() {
+  // Se a pessoa chegou aqui pelo card "Vencidos" da Tela Inicial
+  // (link /estoque?filtro=vencidos), já abre filtrado.
+  const params = useLocalSearchParams();
+  const [mostrarSoVencidos, setMostrarSoVencidos] = useState(false);
+
+  useEffect(() => {
+    if (params.filtro === "vencidos") {
+      setMostrarSoVencidos(true);
+    }
+  }, [params.filtro]);
+
   // ---------------------------------------------------------
   // CONTROLE DE ACESSO
   // ---------------------------------------------------------
@@ -168,13 +185,188 @@ export default function Estoque() {
 
   // Filtra por nome, categoria ou C.A — sem diferenciar maiúsculas/minúsculas.
   const termoBusca = searchTerm.trim().toLowerCase();
-  const filteredMaterials = termoBusca
+  const materialsAposBusca = termoBusca
     ? materials.filter((material) =>
         [material.nome, material.categoria, material.ca]
           .filter(Boolean)
           .some((campo) => campo.toLowerCase().includes(termoBusca))
       )
     : materials;
+
+  // Se o filtro "só vencidos" estiver ativo, aplica por cima da busca.
+  const filteredMaterials = mostrarSoVencidos
+    ? materialsAposBusca.filter((material) => isVencido(material.validade))
+    : materialsAposBusca;
+
+  // GERAR RELATÓRIO (.xlsx)
+  //
+  // Exporta a lista de materiais que está sendo exibida (respeita o
+  // campo de busca) para uma planilha Excel com título, cabeçalho
+  // colorido e largura de coluna ajustada ao conteúdo — evita aquele
+  // texto cortado no limite da célula. Por enquanto funciona só
+  // rodando o app pelo navegador (web). Dá pra estender pro app nativo
+  // depois (com expo-file-system + expo-sharing) se precisarem gerar
+  // relatório direto no celular.
+
+  const CORES = {
+    verdeEscuro: "FF1B4A3B", // mesmo verde do botão "Verificar" da Tela Inicial
+    branco: "FFFFFFFF",
+    cinzaTexto: "FF5F6368",
+    linhaAlternada: "FFF3F6F4",
+    bordaClara: "FFE6E6E6",
+    vermelho: "FFC62828", // mesmo vermelho de erro usado no resto do app
+  };
+
+  async function handleGerarRelatorio() {
+    if (filteredMaterials.length === 0) {
+      Alert.alert(
+        "Nada para exportar",
+        "Não há itens na lista para gerar o relatório."
+      );
+      return;
+    }
+
+    if (Platform.OS !== "web") {
+      Alert.alert(
+        "Disponível só na versão web",
+        "Por enquanto, gerar relatório em .xlsx só funciona rodando o app pelo navegador."
+      );
+      return;
+    }
+
+    try {
+      const agora = new Date();
+
+      // Colunas do relatório — separadas (não um texto só) pra dar pra
+      // ordenar/filtrar de verdade depois de aberto no Excel.
+      const colunas = [
+        { header: "Nome", key: "nome", numerica: false },
+        { header: "Categoria", key: "categoria", numerica: false },
+        { header: "Quantidade", key: "quantidade", numerica: true },
+        { header: "Unidade de medida", key: "unidadeMedida", numerica: false },
+        { header: "Total (un.)", key: "total", numerica: true },
+        { header: "Validade", key: "validade", numerica: false },
+        { header: "C.A.", key: "ca", numerica: false },
+      ];
+
+      const linhas = filteredMaterials.map((material) => ({
+        nome: material.nome,
+        categoria: material.categoria,
+        quantidade: material.quantidade,
+        unidadeMedida: material.unidadeMedida,
+        total: material.quantidadeTotal,
+        validade: material.validade || "—",
+        ca: material.ca || "—",
+        vencido: isVencido(material.validade),
+      }));
+
+      const totalColunas = colunas.length;
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "Sistema de Estoque";
+      workbook.created = agora;
+
+      const worksheet = workbook.addWorksheet("Estoque");
+
+      // Linha 1: título, mesclado ao longo de todas as colunas
+      worksheet.mergeCells(1, 1, 1, totalColunas);
+      const tituloCell = worksheet.getCell(1, 1);
+      tituloCell.value = "Relatório de Estoque";
+      tituloCell.font = { size: 16, bold: true, color: { argb: CORES.verdeEscuro } };
+      tituloCell.alignment = { vertical: "middle" };
+      worksheet.getRow(1).height = 26;
+
+      // Linha 2: subtítulo com data/hora e quantidade de itens
+      worksheet.mergeCells(2, 1, 2, totalColunas);
+      const subtituloCell = worksheet.getCell(2, 1);
+      const horaFormatada = agora.toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      subtituloCell.value = `Gerado em ${agora.toLocaleDateString("pt-BR")} às ${horaFormatada} — ${linhas.length} ${linhas.length === 1 ? "item" : "itens"}`;
+      subtituloCell.font = { size: 10, italic: true, color: { argb: CORES.cinzaTexto } };
+
+      // Linha 3: espaço em branco só pra dar um respiro visual
+      worksheet.getRow(3).height = 8;
+
+      // Linha 4: cabeçalho da tabela
+      const headerRowIndex = 4;
+      const headerRow = worksheet.getRow(headerRowIndex);
+      colunas.forEach((coluna, index) => {
+        const cell = headerRow.getCell(index + 1);
+        cell.value = coluna.header;
+        cell.font = { bold: true, color: { argb: CORES.branco } };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: CORES.verdeEscuro },
+        };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+      });
+      headerRow.height = 22;
+
+      // Linhas de dados: tudo centralizado, com listras alternadas pra
+      // facilitar a leitura — e fundo vermelho/texto branco nos itens
+      // com validade vencida (isso se sobrepõe à listra normal).
+      linhas.forEach((linha, index) => {
+        const row = worksheet.getRow(headerRowIndex + 1 + index);
+        colunas.forEach((coluna, colIndex) => {
+          const cell = row.getCell(colIndex + 1);
+          cell.value = linha[coluna.key];
+          cell.alignment = { vertical: "middle", horizontal: "center" };
+          cell.border = {
+            bottom: { style: "thin", color: { argb: CORES.bordaClara } },
+          };
+
+          if (linha.vencido) {
+            cell.font = { color: { argb: CORES.branco } };
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: CORES.vermelho },
+            };
+          } else if (index % 2 === 1) {
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: CORES.linhaAlternada },
+            };
+          }
+        });
+      });
+
+      // Largura de cada coluna calculada pelo maior texto que ela recebe,
+      // pra nenhum conteúdo ficar cortado no limite da célula.
+      colunas.forEach((coluna, index) => {
+        const textos = [coluna.header, ...linhas.map((l) => String(l[coluna.key] ?? ""))];
+        const maiorTexto = textos.reduce((max, texto) => Math.max(max, texto.length), 0);
+        worksheet.getColumn(index + 1).width = Math.min(Math.max(maiorTexto + 4, 12), 40);
+      });
+
+      // Mantém título e cabeçalho visíveis ao rolar a planilha
+      worksheet.views = [{ state: "frozen", ySplit: headerRowIndex }];
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      const dataArquivo = agora.toLocaleDateString("pt-BR").split("/").join("-");
+      const nomeArquivo = `relatorio-estoque-${dataArquivo}.xlsx`;
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = nomeArquivo;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Erro ao gerar relatório:", error);
+      Alert.alert("Erro", "Não foi possível gerar o relatório.");
+    }
+  }
 
   // ABRIR O MODAL DE ADICIONAR/RETIRAR
   //
@@ -256,6 +448,13 @@ export default function Estoque() {
         actions={
           <>
             <TouchableOpacity
+              style={styles.reportButton}
+              onPress={handleGerarRelatorio}
+            >
+              <Text style={styles.addButtonText}>Gerar relatório</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={styles.retirarButton}
               onPress={() => openMovement("retirar")}
             >
@@ -277,6 +476,15 @@ export default function Estoque() {
           </>
         }
       />
+
+      {mostrarSoVencidos && (
+        <View style={styles.filtroChip}>
+          <Text style={styles.filtroChipText}>Mostrando só itens vencidos</Text>
+          <TouchableOpacity onPress={() => setMostrarSoVencidos(false)}>
+            <Text style={styles.filtroChipClose}>Ver todos</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView style={styles.Space} contentContainerStyle={{ paddingBottom: 30 }}>
         <View style={styles.table}>
@@ -319,7 +527,9 @@ export default function Estoque() {
             filteredMaterials.length === 0 && (
               <View style={styles.centerBox}>
                 <Text style={styles.emptyText}>
-                  Nenhum material encontrado para "{searchTerm}".
+                  {searchTerm
+                    ? `Nenhum material encontrado para "${searchTerm}".`
+                    : "Nenhum item vencido no momento."}
                 </Text>
               </View>
             )}
@@ -329,20 +539,27 @@ export default function Estoque() {
             !listError &&
             filteredMaterials.map((material) => {
               const selected = material.id === selectedId;
+              const vencido = isVencido(material.validade);
               return (
                 <TouchableOpacity
                   key={material.id}
-                  style={styles.row}
+                  style={[styles.row, vencido && styles.rowVencido]}
                   activeOpacity={0.7}
                   onPress={() => toggleSelect(material.id)}
                 >
                   <View style={styles.checkboxColumn}>
-                    <View style={[styles.checkbox, selected && styles.checkboxChecked]} />
+                    <View
+                      style={[
+                        styles.checkbox,
+                        vencido && styles.checkboxVencido,
+                        selected && styles.checkboxChecked,
+                      ]}
+                    />
                   </View>
                   {COLUMNS.map((col) => (
                     <Text
                       key={col.key}
-                      style={[styles.cell, { flex: col.flex }]}
+                      style={[styles.cell, { flex: col.flex }, vencido && styles.cellVencido]}
                       numberOfLines={1}
                     >
                       {cellValue(material, col.key)}
@@ -441,9 +658,40 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: "#ffffff",
   },
+  reportButton: {
+    borderWidth: 1,
+    borderColor: "#a9a9a9",
+    borderRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: "#ffffff",
+  },
   Space: {
     paddingHorizontal: 24,
     paddingTop: 8,
+  },
+  filtroChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#fdeceb",
+    borderWidth: 1,
+    borderColor: "#f3c8c4",
+    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginHorizontal: 24,
+    marginTop: 12,
+  },
+  filtroChipText: {
+    fontSize: 13,
+    color: "#c62828",
+  },
+  filtroChipClose: {
+    fontSize: 12,
+    color: "#c62828",
+    fontWeight: "600",
+    textDecorationLine: "underline",
   },
   table: {
     borderWidth: 1,
@@ -471,6 +719,15 @@ const styles = StyleSheet.create({
   checkboxChecked: {
     backgroundColor: "#1b4a3b",
     borderColor: "#1b4a3b",
+  },
+  rowVencido: {
+    backgroundColor: "#ce2f3c",
+  },
+  cellVencido: {
+    color: "#ffffff",
+  },
+  checkboxVencido: {
+    borderColor: "#ffffff",
   },
   headerCell: {
     fontSize: 13,
