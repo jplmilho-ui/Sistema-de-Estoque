@@ -1,6 +1,6 @@
 //Barra lateral + top usada em todas as telas logadas
 import { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { router, usePathname } from "expo-router";
 import { clearSession, getSession } from "../services/authStorage";
 
@@ -47,8 +47,10 @@ export default function AppBar({ children }) {
       <View style={styles.topBar}>
         <View style={styles.sidebarTop}>
           
-          <View style={styles.logoPlaceholder}>
-          </View>
+          <Image
+          source={require("../assets/logo_sece_minimalista.png")}
+            style={styles.logo}
+          />
         </View>
 
         <View style={styles.contentTop}>
@@ -171,4 +173,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  logo: {
+  width: 100,
+  height: 100,
+  resizeMode: "contain",
+},
 });
