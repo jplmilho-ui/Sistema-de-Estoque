@@ -8,8 +8,6 @@
     "expo": "~57.0.12",
     "expo-router": "~57.0.12",
     "expo-status-bar": "~57.0.1",
-    "jspdf": "^4.2.1",
-    "jspdf-autotable": "^5.0.8",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.2",

@@ -112,7 +112,6 @@ export default function Materiais() {
 
     verifyAccess();
   }, []);
-  
 
   // CARREGAR MATERIAIS
 
@@ -368,13 +367,6 @@ export default function Materiais() {
   // material — os dois têm o mesmo nível de permissão nesta tela.
   const isAdminLevel =
     session?.user?.role === "admin" || session?.user?.role === "super_admin";
-    const termoBusca = searchTerm.trim().toLowerCase();
-
-  const materiaisFiltrados = termoBusca
-  ? materials.filter((material) =>
-      material.nome?.toLowerCase().includes(termoBusca)
-    )
-  : materials;
 
   // INTERFACE
 
@@ -595,21 +587,17 @@ export default function Materiais() {
             </View>
           )}
 
-          {!loadingList &&
-  !listError &&
-  materiaisFiltrados.length === 0 && (
-    <View style={styles.centerBox}>
-      <Text style={styles.emptyText}>
-        {termoBusca
-          ? "Nenhum material encontrado."
-          : "Nenhum material cadastrado ainda."}
-      </Text>
-    </View>
-  )}
+          {!loadingList && !listError && materials.length === 0 && (
+            <View style={styles.centerBox}>
+              <Text style={styles.emptyText}>
+                Nenhum material cadastrado ainda.
+              </Text>
+            </View>
+          )}
 
           {!loadingList &&
             !listError &&
-            materiaisFiltrados.map((material) => {
+            materials.map((material) => {
               const { principal, detalhe } = formatQuantidade(material);
 
               return (

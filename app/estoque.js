@@ -8,7 +8,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Modal,Platform,
+  Modal,
+  Platform,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 // Import direto no build de navegador do exceljs: o pacote também tem uma
