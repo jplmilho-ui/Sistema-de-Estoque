@@ -16,10 +16,10 @@ import {
 } from "../services/materialApi";
 
 // Papéis que podem ver esta tela. Materiais é uma área administrativa:
-// só super_admin e admin (coordenador) cadastram/editam/inativam/excluem
+// só admin e coordenador cadastram/editam/inativam/excluem
 // tipos de material. Professor NÃO administra materiais — ele só
 // movimenta quantidade (adicionar/retirar) pela tela de Estoque.
-const PAPEIS_PERMITIDOS = ["super_admin", "admin"];
+const PAPEIS_PERMITIDOS = ["admin", "coordenador"];
 
 const CATEGORIAS = ["EPI", "Uniforme", "Outro"];
 
@@ -30,7 +30,7 @@ const UNIDADES = ["Unidade", "Caixa", "Pacote", "Outro"];
 export default function Materiais() {
   // CONTROLE DE ACESSO
   // Tela administrativa: cadastro dos tipos de material (visualizar,
-  // criar, editar, inativar, excluir). Só super_admin e admin acessam.
+  // criar, editar, inativar, excluir). Só admin e coordenador acessam.
   // Retirar/adicionar quantidade em estoque é feito na tela de Estoque.
 
   const [checkingAccess, setCheckingAccess] = useState(true);
@@ -92,10 +92,16 @@ export default function Materiais() {
           return;
         }
 
+        // Aluno só usa a tela de Solicitações.
+        if (currentSession.user?.role === "aluno") {
+          router.replace("/solicitacoes");
+          return;
+        }
+
         if (!PAPEIS_PERMITIDOS.includes(currentSession.user?.role)) {
           Alert.alert(
             "Acesso restrito",
-            "Essa área é só para super administradores e administradores."
+            "Essa área é só para administradores e coordenadores."
           );
           router.replace("/tela_inicial");
           return;
@@ -358,15 +364,33 @@ export default function Materiais() {
     return null;
   }
 
+  // BUSCA: filtra a lista por nome, categoria, unidade de medida ou C.A.
+  // (sem diferenciar maiúsculas/minúsculas nem acentos).
+  const normalizar = (texto) =>
+    String(texto ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+  const termoBusca = normalizar(searchTerm.trim());
+
+  const filteredMaterials = termoBusca
+    ? materials.filter((material) =>
+        [material.nome, material.categoria, material.unidadeMedida, material.ca].some(
+          (campo) => normalizar(campo).includes(termoBusca)
+        )
+      )
+    : materials;
+
   const unidadeSelecionada = unidadeFinal();
   const totalCalculado =
     (Number(quantidade) || 0) *
     (unidadeMedida === "Unidade" ? 1 : Number(fatorConversao) || 0);
 
-  // Super_admin e admin (coordenador) cadastram/editam/inativam/excluem
-  // material — os dois têm o mesmo nível de permissão nesta tela.
+  // Admin e coordenador cadastram/editam/inativam/excluem material —
+  // os dois têm o mesmo nível de permissão nesta tela.
   const isAdminLevel =
-    session?.user?.role === "admin" || session?.user?.role === "super_admin";
+    session?.user?.role === "admin" || session?.user?.role === "coordenador";
 
   // INTERFACE
 
@@ -597,7 +621,18 @@ export default function Materiais() {
 
           {!loadingList &&
             !listError &&
-            materials.map((material) => {
+            materials.length > 0 &&
+            filteredMaterials.length === 0 && (
+              <View style={styles.centerBox}>
+                <Text style={styles.emptyText}>
+                  {`Nenhum material encontrado para "${searchTerm.trim()}".`}
+                </Text>
+              </View>
+            )}
+
+          {!loadingList &&
+            !listError &&
+            filteredMaterials.map((material) => {
               const { principal, detalhe } = formatQuantidade(material);
 
               return (

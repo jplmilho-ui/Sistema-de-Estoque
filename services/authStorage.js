@@ -1,8 +1,13 @@
 //Guarda o token/usuário no dispositivo
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const TOKEN_KEY = "@estoque:token";
-const USER_KEY = "@estoque:user";
+// As chaves têm sufixo de versão ("v2") de propósito: depois da troca dos
+// nomes dos níveis de acesso (admin/coordenador), uma sessão antiga ainda
+// guardada no aparelho traria o papel com o significado ANTIGO (o "admin"
+// de antes é o "coordenador" de agora). Mudar a chave invalida essas
+// sessões e obriga um novo login, já com o papel correto.
+const TOKEN_KEY = "@estoque:token:v2";
+const USER_KEY = "@estoque:user:v2";
 
 export async function saveSession(token, user) {
   await AsyncStorage.multiSet([

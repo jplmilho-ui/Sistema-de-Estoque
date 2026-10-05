@@ -9,6 +9,7 @@ export default function Layout() {
       <Stack.Screen name="usuarios" options={{ headerShown: false }} />
       <Stack.Screen name="materiais" options={{ headerShown: false }} />
       <Stack.Screen name="movimentacoes" options={{ headerShown: false }} />
+      <Stack.Screen name="solicitacoes" options={{ headerShown: false }} />
     </Stack>
   );
 }

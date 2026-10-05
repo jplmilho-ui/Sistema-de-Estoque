@@ -100,14 +100,14 @@ function validatePayload(body) {
 }
 
 // ---------------------------------------------------------------
-// CRUD (restrito a super_admin/admin — ver material.routes.js).
+// CRUD (restrito a admin/coordenador — ver material.routes.js).
 // listMaterials é a exceção: professor também acessa (só leitura),
 // porque a tela de Estoque reaproveita esse mesmo endpoint.
 // ---------------------------------------------------------------
 
 async function listMaterials(req, res) {
   try {
-    // Tela de Materiais (admin/super_admin) chama sem filtro e enxerga
+    // Tela de Materiais (admin/coordenador) chama sem filtro e enxerga
     // ativos e inativos, pra poder reativar quem foi inativado.
     //
     // Tela de Estoque chama com ?ativo=true: só material ATIVO aparece
@@ -215,12 +215,12 @@ async function deleteMaterial(req, res) {
       return res.status(404).json({ error: 'Material não encontrado.' });
     }
     // P2003 = violação de chave estrangeira: esse material já tem
-    // movimentações (entradas/saídas) registradas, então excluir quebraria
-    // o histórico. Em vez de forçar a exclusão, orienta a inativar.
+    // movimentações (entradas/saídas) ou solicitações de alunos
+    // registradas, então excluir quebraria o histórico. Em vez de forçar a exclusão, orienta a inativar.
     if (error.code === 'P2003') {
       return res.status(409).json({
         error:
-          'Não é possível excluir esse material porque já existem movimentações (entradas/saídas) registradas para ele. Inative o material em vez de excluí-lo — assim ele deixa de aparecer no Estoque, mas o histórico é preservado.',
+          'Não é possível excluir esse material porque já existem movimentações (entradas/saídas) ou solicitações de alunos registradas para ele. Inative o material em vez de excluí-lo — assim ele deixa de aparecer no Estoque, mas o histórico é preservado.',
       });
     }
     console.error(error);
@@ -236,7 +236,7 @@ async function deleteMaterial(req, res) {
 // registram uma Movimentacao — é o que aparece na tela "Movimentações".
 //
 // Permissões (ver material.routes.js):
-//   retirar / devolver -> super_admin, admin (coordenador) e professor
+//   retirar / devolver -> admin, coordenador e professor
 //   (essas são as ações da tela de Estoque: "Retirar item" e
 //   "Adicionar item" — os três papéis podem movimentar quantidade,
 //   mesmo quem não administra o cadastro de materiais)

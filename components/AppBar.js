@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { router, usePathname } from "expo-router";
 import { clearSession, getSession } from "../services/authStorage";
+import NotificationsPopup from "./NotificationsPopup";
+import useNotificacoes from "./useNotificacoes";
 
 
 
@@ -11,38 +13,72 @@ const NAV_ESTOQUE = { label: "Estoque", href: "/estoque", icon: "📦" };
 const NAV_USUARIOS = { label: "Usuários", href: "/usuarios", icon: "👥" };
 const NAV_MATERIAIS = { label: "Materiais", href: "/materiais", icon: "🗂️" };
 const NAV_MOVIMENTACOES = { label: "Movimentações", href: "/movimentacoes", icon: "🔄" };
+const NAV_SOLICITACOES = { label: "Solicitações", href: "/solicitacoes", icon: "📝" };
 
 export default function AppBar({ children }) {
   const pathname = usePathname();
   const [role, setRole] = useState(null);
 
-  // TODO: trocar por uma contagem real vinda do backend quando existir
-  // um endpoint de notificações (ex: itens próximos da validade,
-  // avisos de estoque baixo etc).
-  const [hasNotifications, setHasNotifications] = useState(false);
+  // Sessão usada pelas notificações (token pra buscar os dados e id do
+  // usuário pra guardar o que ele já leu).
+  const [auth, setAuth] = useState({ token: null, userId: null, role: null });
+
+  // Pop-up de notificações (sino). A lista depende do perfil: solicitações
+  // de alunos (prioridade), alertas e movimentações para a equipe; só
+  // solicitações aprovadas para o aluno — ver services/notificacoes.js.
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notifications = useNotificacoes(auth);
 
   useEffect(() => {
-    getSession().then(({ user }) => setRole(user?.role ?? null));
+    getSession().then(({ token, user }) => {
+      setRole(user?.role ?? null);
+      setAuth({ token, userId: user?.id ?? null, role: user?.role ?? null });
+    });
   }, []);
+
+  function openNotifications() {
+    setNotificationsOpen(true);
+    notifications.reload(); // garante dados frescos ao abrir
+  }
+
+  function handlePressNotification(item) {
+    notifications.markRead(item.id);
+
+    // Notificações sem destino (ex: pedido de aluno aguardando resposta)
+    // só são marcadas como lidas — o pop-up continua aberto pra aprovar
+    // ou recusar ali mesmo.
+    if (!item.href) return;
+
+    setNotificationsOpen(false);
+    router.push(item.params ? { pathname: item.href, params: item.params } : item.href);
+  }
 
   async function handleLogout() {
     await clearSession();
     router.replace("/");
   }
 
-  // "Materiais" é uma área administrativa: só super_admin e admin
-  // (coordenador) enxergam esse item no menu — professor não administra
-  // o cadastro de materiais, só movimenta quantidade pela tela de Estoque.
-  const isAdminLevel = role === "admin" || role === "super_admin";
+  // "Materiais" é uma área administrativa: só admin e coordenador
+  // enxergam esse item no menu — professor não administra o cadastro de
+  // materiais, só movimenta quantidade pela tela de Estoque.
+  const isAdminLevel = role === "admin" || role === "coordenador";
 
-  const navItems = [
-    NAV_TELA_INICIAL,
-    NAV_ESTOQUE,
-    // "Usuários" também é exclusivo de admin/super_admin.
-    ...(isAdminLevel ? [NAV_USUARIOS] : []),
-    ...(isAdminLevel ? [NAV_MATERIAIS] : []),
-    NAV_MOVIMENTACOES,
-  ];
+  // O aluno tem uma versão reduzida do sistema: só a tela de Solicitações.
+  // Enquanto o papel ainda não carregou, não mostra nenhum item (evita o
+  // aluno ver o menu completo por um instante).
+  const navItems =
+    role === null
+      ? []
+      : role === "aluno"
+      ? [NAV_SOLICITACOES]
+      : [
+          NAV_TELA_INICIAL,
+          NAV_ESTOQUE,
+          // "Usuários" também é exclusivo de admin/coordenador.
+          ...(isAdminLevel ? [NAV_USUARIOS] : []),
+          ...(isAdminLevel ? [NAV_MATERIAIS] : []),
+          NAV_MOVIMENTACOES,
+        ];
 
   return (
     <View style={styles.root}>
@@ -61,15 +97,39 @@ export default function AppBar({ children }) {
         <View style={styles.contentTop}>
           <TouchableOpacity
             style={styles.notificationButton}
-            onPress={() => router.push("/notificacoes")}
+            onPress={openNotifications}
+            accessibilityLabel="Notificações"
           >
             <Text style={styles.notificationIcon}>🔔</Text>
-            {hasNotifications && <View style={styles.notificationDot} />}
+            {notifications.unreadCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {notifications.unreadCount > 9 ? "9+" : notifications.unreadCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
           <View style={styles.avatar} />
         </View>
         <title></title>
       </View>
+
+      <NotificationsPopup
+        visible={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        items={notifications.items}
+        lidas={notifications.lidas}
+        unreadCount={notifications.unreadCount}
+        loading={notifications.loading}
+        loaded={notifications.loaded}
+        error={notifications.error}
+        onPressItem={handlePressNotification}
+        onMarkAllRead={notifications.markAllRead}
+        isAluno={role === "aluno"}
+        onRespond={role === "aluno" ? undefined : notifications.responderSolicitacao}
+        respondendoId={notifications.respondendoId}
+        errosAcao={notifications.errosAcao}
+      />
 
 
 
@@ -157,16 +217,25 @@ const styles = StyleSheet.create({
   notificationIcon: {
     fontSize: 16,
   },
-  notificationDot: {
+  // Contador de não lidas (estilo YouTube: bolinha vermelha com número)
+  notificationBadge: {
     position: "absolute",
-    top: 6,
-    right: 7,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: 0,
+    right: -2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
     backgroundColor: "#c62828",
     borderWidth: 1,
-    borderColor: "#ffffff",
+    borderColor: "#2D7A5F",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notificationBadgeText: {
+    color: "#ffffff",
+    fontSize: 9,
+    fontWeight: "700",
   },
   avatar: {
     width: 36,

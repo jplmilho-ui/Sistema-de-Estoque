@@ -5,6 +5,7 @@ import { router } from "expo-router";
 
 import AppBar from "../components/AppBar";
 import PageHeader from "../components/PageHeader";
+import SearchBox from "../components/SearchBox";
 import { confirmAction } from "../utils/confirmAction";
 
 
@@ -19,14 +20,15 @@ import {
 
 
 const SENHA_MINIMA = 8;
+const RM_MAXIMO = 5; // o RM do aluno tem no máximo 5 caracteres
 const EMAIL_MINIMO = 8;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Rótulo e estilo exibidos na coluna "Tipo" pra cada papel possível.
-// Antes só existia "admin"/"user"; agora são 4 papéis.
+// Hierarquia: Admin > Coordenador > Professor > Aluno.
 const ROLE_INFO = {
-  super_admin: { label: "Super admin", style: "roleBadgeSuperAdmin" },
-  admin: { label: "Administrador", style: "roleBadgeAdmin" },
+  admin: { label: "Admin", style: "roleBadgeSuperAdmin" },
+  coordenador: { label: "Coordenador", style: "roleBadgeAdmin" },
   professor: { label: "Professor", style: "roleBadgeProfessor" },
   aluno: { label: "Aluno", style: "roleBadgeAluno" },
 };
@@ -36,19 +38,36 @@ function getRoleInfo(role) {
 }
 
 // Quais papéis aparecem no formulário de criação, dependendo de quem
-// está logado. Super_admin pode criar admin também; admin não.
+// está logado. Admin pode criar coordenador também; coordenador não.
 const ROLE_OPTIONS_BY_CREATOR = {
-  super_admin: [
-    { value: "admin", label: "Administrador (coordenador)" },
+  admin: [
+    { value: "coordenador", label: "Coordenador" },
     { value: "professor", label: "Professor" },
     { value: "aluno", label: "Aluno" },
   ],
-  admin: [
+  coordenador: [
     { value: "professor", label: "Professor" },
     { value: "aluno", label: "Aluno" },
   ],
 };
 
+
+// Opções do filtro por tipo de conta (além da pesquisa por texto).
+const FILTROS_TIPO = [
+  { key: "todos", label: "Todos" },
+  { key: "admin", label: "Admin" },
+  { key: "coordenador", label: "Coordenador" },
+  { key: "professor", label: "Professor" },
+  { key: "aluno", label: "Aluno" },
+];
+
+// Tira acentos e maiúsculas pra pesquisa achar "joao" em "João".
+function normalizar(texto) {
+  return String(texto ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
 
 export default function Usuarios() {
 
@@ -75,6 +94,10 @@ export default function Usuarios() {
 
   // Guarda possíveis erros ao carregar os usuários
   const [listError, setListError] = useState("");
+
+  // Pesquisa (nome, e-mail, RM ou tipo) e filtro por tipo de conta
+  const [searchTerm, setSearchTerm] = useState("");
+  const [tipoFiltro, setTipoFiltro] = useState("todos");
 
 
   // ---------------------------------------------------------
@@ -125,11 +148,17 @@ export default function Usuarios() {
           return;
         }
 
-        // Administradores e super_admin podem acessar esta tela
-        if (!["admin", "super_admin"].includes(currentSession.user?.role)) {
+        // Admin e coordenador podem acessar esta tela
+        // Aluno só usa a tela de Solicitações.
+        if (currentSession.user?.role === "aluno") {
+          router.replace("/solicitacoes");
+          return;
+        }
+
+        if (!["admin", "coordenador"].includes(currentSession.user?.role)) {
           Alert.alert(
             "Acesso restrito",
-            "Essa área é só para administradores."
+            "Essa área é só para administradores e coordenadores."
           );
 
           router.replace("/tela_inicial");
@@ -275,6 +304,10 @@ export default function Usuarios() {
       setFormError("Informe o RM do aluno.");
       return;
     }
+    if (newUserRole === "aluno" && rm.trim().length > RM_MAXIMO) {
+      setFormError(`O RM do aluno pode ter no máximo ${RM_MAXIMO} caracteres.`);
+      return;
+    }
 
     setSaving(true);
 
@@ -373,6 +406,27 @@ export default function Usuarios() {
     return null;
   }
 
+  // PESQUISA E FILTRO
+  //
+  // A pesquisa procura em nome, e-mail, RM e no nome do tipo (ex: digitar
+  // "coord" acha os coordenadores), sem diferenciar acento nem maiúscula.
+  // O filtro por tipo vale junto com a pesquisa.
+  const termo = normalizar(searchTerm.trim());
+
+  const filteredUsers = users.filter((user) => {
+    if (tipoFiltro !== "todos" && user.role !== tipoFiltro) {
+      return false;
+    }
+    if (!termo) {
+      return true;
+    }
+    return [user.name, user.email, user.rm, getRoleInfo(user.role).label].some(
+      (campo) => normalizar(campo).includes(termo)
+    );
+  });
+
+  const temFiltroAtivo = !!termo || tipoFiltro !== "todos";
+
 
 
   // INTERFACE
@@ -385,22 +439,30 @@ export default function Usuarios() {
         title="Usuários"
 
         actions={
-          <TouchableOpacity
-            style={styles.newButton}
+          <>
+            <SearchBox
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+              placeholder="Buscar nome, e-mail ou RM..."
+            />
 
-            onPress={() => {
+            <TouchableOpacity
+              style={styles.newButton}
 
-              // Abre ou fecha o formulário
-              setFormOpen((open) => !open);
+              onPress={() => {
 
-              // Limpa mensagens de erro
-              setFormError("");
-            }}
-          >
-            <Text style={styles.newButtonText}>
-              {formOpen ? "Cancelar" : "Novo usuário"}
-            </Text>
-          </TouchableOpacity>
+                // Abre ou fecha o formulário
+                setFormOpen((open) => !open);
+
+                // Limpa mensagens de erro
+                setFormError("");
+              }}
+            >
+              <Text style={styles.newButtonText}>
+                {formOpen ? "Cancelar" : "Novo usuário"}
+              </Text>
+            </TouchableOpacity>
+          </>
         }
       />
 
@@ -493,9 +555,10 @@ export default function Usuarios() {
             {newUserRole === "aluno" && (
               <TextInput
                 style={styles.input}
-                placeholder="RM do aluno"
+                placeholder={`RM do aluno (máx. ${RM_MAXIMO} caracteres)`}
                 value={rm}
                 onChangeText={setRm}
+                maxLength={RM_MAXIMO}
                 editable={!saving}
               />
             )}
@@ -534,6 +597,35 @@ export default function Usuarios() {
           </View>
         )}
 
+
+        {/* Filtro por tipo de conta */}
+        <View style={styles.tipoRow}>
+          <Text style={styles.tipoLabel}>Tipo:</Text>
+          {FILTROS_TIPO.map((opcao) => {
+            const ativo = tipoFiltro === opcao.key;
+            return (
+              <TouchableOpacity
+                key={opcao.key}
+                style={[styles.tipoChip, ativo && styles.tipoChipActive]}
+                onPress={() => setTipoFiltro(opcao.key)}
+              >
+                <Text
+                  style={[styles.tipoChipText, ativo && styles.tipoChipTextActive]}
+                >
+                  {opcao.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+
+          {!loadingUsers && !listError && users.length > 0 && (
+            <Text style={styles.contagemText}>
+              {temFiltroAtivo
+                ? `${filteredUsers.length} de ${users.length} usuários`
+                : `${users.length} ${users.length === 1 ? "usuário" : "usuários"}`}
+            </Text>
+          )}
+        </View>
 
         {/* 
             LISTA DE USUÁRIOS
@@ -627,23 +719,40 @@ export default function Usuarios() {
             )}
 
 
+          {/* Pesquisa/filtro sem resultado */}
+          {!loadingUsers &&
+            !listError &&
+            users.length > 0 &&
+            filteredUsers.length === 0 && (
+
+              <View style={styles.centerBox}>
+                <Text style={styles.emptyText}>
+                  {searchTerm.trim()
+                    ? `Nenhum usuário encontrado para "${searchTerm.trim()}".`
+                    : "Nenhum usuário desse tipo."}
+                </Text>
+              </View>
+
+            )}
+
+
           {/* Usuários */}
           {!loadingUsers &&
             !listError &&
-            users.map((user) => {
+            filteredUsers.map((user) => {
 
               // Verifica se o usuário da linha
               // é o próprio administrador logado.
               const isSelf =
                 user.id === session?.user?.id;
 
-              // Admin comum não pode excluir outro admin nem o
-              // super_admin — só o super_admin tem esse alcance.
+              // Coordenador não pode excluir outro coordenador nem o
+              // admin — só o admin tem esse alcance.
               // (O backend também barra isso; aqui é só pra nem
               // mostrar o botão como clicável nesses casos.)
               const semPermissaoParaExcluir =
-                session?.user?.role === "admin" &&
-                ["admin", "super_admin"].includes(user.role);
+                session?.user?.role === "coordenador" &&
+                ["coordenador", "admin"].includes(user.role);
 
 
               return (
@@ -844,6 +953,45 @@ const styles = StyleSheet.create({
   roleOptionTextActive: {
     color: "#ed0000",
     fontWeight: "600",
+  },
+
+  // Filtro por tipo de conta
+  tipoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 14,
+  },
+  tipoLabel: {
+    fontSize: 13,
+    color: "#5f6368",
+    marginRight: 4,
+  },
+  tipoChip: {
+    borderWidth: 1,
+    borderColor: "#c9c9c9",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    backgroundColor: "#ffffff",
+  },
+  tipoChipActive: {
+    borderColor: "#1B4A3B",
+    backgroundColor: "#1B4A3B",
+  },
+  tipoChipText: {
+    fontSize: 13,
+    color: "#5f6368",
+  },
+  tipoChipTextActive: {
+    color: "#ffffff",
+    fontWeight: "600",
+  },
+  contagemText: {
+    fontSize: 12,
+    color: "#80868b",
+    marginLeft: "auto",
   },
 
   saveButton: {

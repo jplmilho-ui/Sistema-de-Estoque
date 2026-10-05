@@ -3,6 +3,7 @@ const prisma = require('../lib/prisma');
 
 const SENHA_MINIMA = 8;
 const EMAIL_MINIMO = 8;
+const RM_MAXIMO = 5; // o RM do aluno tem no máximo 5 caracteres
 // Checagem simples de formato (algo@algo.algo) — não cobre todo caso
 // de e-mail válido que existe, mas barra o óbvio (sem "@", sem domínio).
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -34,8 +35,8 @@ async function listUsers(req, res) {
 // Quem está logado (req.userRole, preenchido pelo admin.middleware.js)
 // define quais papéis ele tem permissão de criar por aqui.
 const PAPEIS_QUE_PODE_CRIAR = {
-  super_admin: ['admin', 'professor', 'aluno'],
-  admin: ['professor', 'aluno'],
+  admin: ['coordenador', 'professor', 'aluno'],
+  coordenador: ['professor', 'aluno'],
 };
 
 async function createUser(req, res) {
@@ -57,9 +58,10 @@ async function createUser(req, res) {
       });
     }
 
-    // Só deixa criar o que a hierarquia permite: super_admin cria
-    // admin/professor/aluno; admin cria só professor/aluno (nunca outro
-    // admin, e nunca super_admin — essa conta só existe via seed).
+    // Só deixa criar o que a hierarquia permite: admin cria
+    // coordenador/professor/aluno; coordenador cria só professor/aluno
+    // (nunca outro coordenador, e nunca admin — essa conta só existe
+    // via seed).
     const papeisPermitidos = PAPEIS_QUE_PODE_CRIAR[req.userRole] || [];
     if (!papeisPermitidos.includes(role)) {
       return res.status(403).json({
@@ -70,6 +72,11 @@ async function createUser(req, res) {
     // Aluno precisa de RM (Registro do Aluno); os outros papéis não usam.
     if (role === 'aluno' && !rm?.trim()) {
       return res.status(400).json({ error: 'Informe o RM do aluno.' });
+    }
+    if (role === 'aluno' && rm.trim().length > RM_MAXIMO) {
+      return res.status(400).json({
+        error: `O RM do aluno pode ter no máximo ${RM_MAXIMO} caracteres.`,
+      });
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -94,7 +101,7 @@ async function createUser(req, res) {
         role,
         rm: role === 'aluno' ? rm.trim() : null,
         // Guarda quem criou a conta, pra manter o rastro da hierarquia
-        // (super_admin -> admin -> professor -> aluno).
+        // (admin -> coordenador -> professor -> aluno).
         criadoPorId: req.userId,
       },
     });
@@ -127,13 +134,13 @@ async function deleteUser(req, res) {
       return res.status(404).json({ error: 'Usuário não encontrado.' });
     }
 
-    // Admin comum não pode excluir outro admin nem o super_admin — só o
-    // super_admin tem esse alcance. Sem essa checagem, um admin qualquer
-    // conseguia remover até o super_admin, o que não faz sentido dentro
-    // da hierarquia (super_admin -> admin -> professor -> aluno).
-    if (req.userRole === 'admin' && ['admin', 'super_admin'].includes(existingUser.role)) {
+    // Coordenador não pode excluir outro coordenador nem o admin — só o
+    // admin tem esse alcance. Sem essa checagem, um coordenador qualquer
+    // conseguia remover até o admin, o que não faz sentido dentro da
+    // hierarquia (admin -> coordenador -> professor -> aluno).
+    if (req.userRole === 'coordenador' && ['coordenador', 'admin'].includes(existingUser.role)) {
       return res.status(403).json({
-        error: 'Um administrador não pode excluir outro administrador ou o super admin.',
+        error: 'Um coordenador não pode excluir outro coordenador ou o admin.',
       });
     }
 
@@ -145,12 +152,13 @@ async function deleteUser(req, res) {
       return res.status(404).json({ error: 'Usuário não encontrado.' });
     }
     // P2003 = violação de chave estrangeira: esse usuário já registrou
-    // movimentações de estoque (retirou/adicionou material), então excluir
-    // a conta quebraria o histórico de quem fez cada movimentação.
+    // movimentações de estoque (retirou/adicionou material) ou já
+    // aprovou/recusou solicitações, então excluir a conta quebraria o
+    // histórico de quem fez cada ação.
     if (error.code === 'P2003') {
       return res.status(409).json({
         error:
-          'Não é possível excluir esse usuário porque ele possui movimentações de estoque registradas em seu nome. Para preservar o histórico, não é permitido excluir contas com movimentações vinculadas.',
+          'Não é possível excluir esse usuário porque ele possui movimentações de estoque ou respostas a solicitações registradas em seu nome. Para preservar o histórico, não é permitido excluir contas com esses registros vinculados.',
       });
     }
     console.error(error);

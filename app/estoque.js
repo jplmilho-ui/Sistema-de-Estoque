@@ -26,19 +26,26 @@ import { listMaterials, retirarMaterial, devolverMaterial } from "../services/ma
 import { isVencido } from "../utils/validade";
 
 // Papéis que podem ver e movimentar o Estoque. Diferente da tela de
-// Materiais (administrativa), aqui super_admin, admin e professor podem
+// Materiais (administrativa), aqui admin, coordenador e professor podem
 // todos visualizar e movimentar quantidade — só não administram o
 // cadastro dos tipos de material (isso é feito em Materiais).
-const PAPEIS_PERMITIDOS = ["super_admin", "admin", "professor"];
+const PAPEIS_PERMITIDOS = ["admin", "coordenador", "professor"];
 
 // Define as colunas da tabela (nome, flex de largura).
 const COLUMNS = [
   { key: "nome", label: "Nome", flex: 2 },
-  { key: "id", label: "ID", flex: 0.6 },
   { key: "quantidade", label: "Quantidade", flex: 1.3 },
   { key: "validade", label: "Validade", flex: 1.1 },
   { key: "categoria", label: "Categoria", flex: 1 },
   { key: "ca", label: "C.A", flex: 0.8 },
+];
+
+// Opções do filtro por categoria (as categorias "EPI" e "Uniforme" são as
+// mesmas cadastradas na tela de Materiais). "todas" não filtra nada.
+const FILTROS_CATEGORIA = [
+  { key: "todas", label: "Todas" },
+  { key: "EPI", label: "EPI" },
+  { key: "Uniforme", label: "Uniforme" },
 ];
 
 // Monta o texto exibido na coluna "Quantidade", ex: "4 caixas (200 un.)"
@@ -47,8 +54,6 @@ function cellValue(material, key) {
   switch (key) {
     case "nome":
       return material.nome;
-    case "id":
-      return String(material.id);
     case "quantidade": {
       const { unidadeMedida, quantidade, quantidadeTotal } = material;
       if (unidadeMedida === "Unidade") {
@@ -103,6 +108,9 @@ export default function Estoque() {
   // ---------------------------------------------------------
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Filtro por categoria: "todas" | "EPI" | "Uniforme"
+  const [categoriaFiltro, setCategoriaFiltro] = useState("todas");
+
   // ---------------------------------------------------------
   // MODAL DE ADICIONAR / RETIRAR QUANTIDADE
   // ---------------------------------------------------------
@@ -124,10 +132,16 @@ export default function Estoque() {
           return;
         }
 
+        // Aluno só usa a tela de Solicitações.
+        if (currentSession.user?.role === "aluno") {
+          router.replace("/solicitacoes");
+          return;
+        }
+
         if (!PAPEIS_PERMITIDOS.includes(currentSession.user?.role)) {
           Alert.alert(
             "Acesso restrito",
-            "Essa área é só para super administradores, administradores e professores."
+            "Essa área é só para administradores, coordenadores e professores."
           );
           router.replace("/tela_inicial");
           return;
@@ -181,8 +195,6 @@ export default function Estoque() {
     setSelectedId((current) => (current === id ? null : id));
   }
 
-  const selectedMaterial = materials.find((item) => item.id === selectedId) || null;
-
   // Filtra por nome, categoria ou C.A — sem diferenciar maiúsculas/minúsculas.
   const termoBusca = searchTerm.trim().toLowerCase();
   const materialsAposBusca = termoBusca
@@ -193,15 +205,27 @@ export default function Estoque() {
       )
     : materials;
 
-  // Se o filtro "só vencidos" estiver ativo, aplica por cima da busca.
+  // Filtro por categoria (EPI / Uniforme), aplicado por cima da busca.
+  const materialsAposCategoria =
+    categoriaFiltro === "todas"
+      ? materialsAposBusca
+      : materialsAposBusca.filter((material) => material.categoria === categoriaFiltro);
+
+  // Se o filtro "só vencidos" estiver ativo, aplica por cima dos outros.
   const filteredMaterials = mostrarSoVencidos
-    ? materialsAposBusca.filter((material) => isVencido(material.validade))
-    : materialsAposBusca;
+    ? materialsAposCategoria.filter((material) => isVencido(material.validade))
+    : materialsAposCategoria;
+
+  // O item selecionado só vale enquanto estiver visível na lista — assim,
+  // ao trocar o filtro ou a busca, "Adicionar/Retirar item" nunca age
+  // num item escondido.
+  const selectedMaterial =
+    filteredMaterials.find((item) => item.id === selectedId) || null;
 
   // GERAR RELATÓRIO (.xlsx)
   //
-  // Exporta a lista de materiais que está sendo exibida (respeita o
-  // campo de busca) para uma planilha Excel com título, cabeçalho
+  // Exporta a lista de materiais que está sendo exibida (respeita a
+  // busca e o filtro de categoria) para uma planilha Excel com título, cabeçalho
   // colorido e largura de coluna ajustada ao conteúdo — evita aquele
   // texto cortado no limite da célula. Por enquanto funciona só
   // rodando o app pelo navegador (web). Dá pra estender pro app nativo
@@ -451,14 +475,14 @@ export default function Estoque() {
               style={styles.reportButton}
               onPress={handleGerarRelatorio}
             >
-              <Text style={styles.addButtonText}>Gerar relatório</Text>
+              <Text style={styles.reportButtonText}>Gerar relatório</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.retirarButton}
               onPress={() => openMovement("retirar")}
             >
-              <Text style={styles.addButtonText}>Retirar item</Text>
+              <Text style={styles.retirarButtonText}>Retirar item</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -476,6 +500,27 @@ export default function Estoque() {
           </>
         }
       />
+
+      {/* Filtro por categoria */}
+      <View style={styles.categoriaRow}>
+        <Text style={styles.categoriaLabel}>Categoria:</Text>
+        {FILTROS_CATEGORIA.map((opcao) => {
+          const ativo = categoriaFiltro === opcao.key;
+          return (
+            <TouchableOpacity
+              key={opcao.key}
+              style={[styles.categoriaChip, ativo && styles.categoriaChipActive]}
+              onPress={() => setCategoriaFiltro(opcao.key)}
+            >
+              <Text
+                style={[styles.categoriaChipText, ativo && styles.categoriaChipTextActive]}
+              >
+                {opcao.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       {mostrarSoVencidos && (
         <View style={styles.filtroChip}>
@@ -529,7 +574,11 @@ export default function Estoque() {
                 <Text style={styles.emptyText}>
                   {searchTerm
                     ? `Nenhum material encontrado para "${searchTerm}".`
-                    : "Nenhum item vencido no momento."}
+                    : mostrarSoVencidos
+                    ? categoriaFiltro === "todas"
+                      ? "Nenhum item vencido no momento."
+                      : `Nenhum item vencido na categoria ${categoriaFiltro}.`
+                    : `Nenhum material na categoria ${categoriaFiltro}.`}
                 </Text>
               </View>
             )}
@@ -638,33 +687,81 @@ export default function Estoque() {
 }
 
 const styles = StyleSheet.create({
+  // "+ Adicionar item": verde escuro do sistema (#1B4A3B)
   addButton: {
     borderWidth: 1,
-    borderColor: "#a9a9a9",
+    borderColor: "#1B4A3B",
     borderRadius: 4,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#1B4A3B",
   },
   addButtonText: {
     fontSize: 13,
-    color: "#1a1a1a",
+    color: "#ffffff",
+    fontWeight: "600",
   },
+  // "Retirar item": cinza escuro (#495057)
   retirarButton: {
     borderWidth: 1,
-    borderColor: "#b1b1b1",
+    borderColor: "#495057",
+    borderRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: "#495057",
+  },
+  retirarButtonText: {
+    fontSize: 13,
+    color: "#ffffff",
+    fontWeight: "600",
+  },
+  // "Gerar relatório": mesmas cores do botão "Novo material" (Materiais)
+  reportButton: {
+    borderWidth: 1,
+    borderColor: "#ed0000",
     borderRadius: 4,
     paddingHorizontal: 14,
     paddingVertical: 8,
     backgroundColor: "#ffffff",
   },
-  reportButton: {
+  reportButtonText: {
+    fontSize: 13,
+    color: "#ed0000",
+    fontWeight: "600",
+  },
+  // Filtro por categoria
+  categoriaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+  },
+  categoriaLabel: {
+    fontSize: 13,
+    color: "#5f6368",
+    marginRight: 4,
+  },
+  categoriaChip: {
     borderWidth: 1,
-    borderColor: "#a9a9a9",
-    borderRadius: 4,
+    borderColor: "#c9c9c9",
+    borderRadius: 16,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 6,
     backgroundColor: "#ffffff",
+  },
+  categoriaChipActive: {
+    borderColor: "#1B4A3B",
+    backgroundColor: "#1B4A3B",
+  },
+  categoriaChipText: {
+    fontSize: 13,
+    color: "#5f6368",
+  },
+  categoriaChipTextActive: {
+    color: "#ffffff",
+    fontWeight: "600",
   },
   Space: {
     paddingHorizontal: 24,

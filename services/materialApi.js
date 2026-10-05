@@ -105,7 +105,7 @@ export async function deleteMaterial(token, id) {
   return parseResponse(response);
 }
 
-// Retirar item do estoque: super_admin, admin (coordenador) e professor.
+// Retirar item do estoque: admin, coordenador e professor.
 export async function retirarMaterial(token, id, quantidade) {
   const response = await fetch(`${API_URL}/materiais/${id}/retirar`, {
     method: "POST",
@@ -115,7 +115,7 @@ export async function retirarMaterial(token, id, quantidade) {
   return parseResponse(response);
 }
 
-// Adicionar item ao estoque: super_admin, admin (coordenador) e professor.
+// Adicionar item ao estoque: admin, coordenador e professor.
 export async function devolverMaterial(token, id, quantidade) {
   const response = await fetch(`${API_URL}/materiais/${id}/devolver`, {
     method: "POST",

@@ -48,6 +48,11 @@ export default function tela_inicial() {
         router.replace("/");
         return;
       }
+      // Aluno só usa a tela de Solicitações.
+      if (currentSession.user?.role === "aluno") {
+        router.replace("/solicitacoes");
+        return;
+      }
       setSession(currentSession);
       setCheckingSession(false);
     }

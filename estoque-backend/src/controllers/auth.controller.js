@@ -16,17 +16,17 @@ async function register(req, res)  {
   // Cadastro público DESATIVADO.
   //
   // Esta função criava contas sempre com role: 'user' — mas esse valor
-  // não existe mais no enum Role (agora é super_admin/admin/professor/
+  // não existe mais no enum Role (agora é admin/coordenador/professor/
   // aluno), então essa rota quebrava com erro 500 a cada chamada.
   //
   // Além do bug, faz sentido esse endpoint deixar de existir de verdade:
-  // com a hierarquia super_admin -> admin -> professor -> aluno, toda
+  // com a hierarquia admin -> coordenador -> professor -> aluno, toda
   // conta precisa nascer com um papel explícito, escolhido por alguém
   // já autenticado e acima na hierarquia (rota protegida /users) — não
   // faz mais sentido alguém se cadastrar sozinho, sem dono, pela tela
   // pública (que, inclusive, já foi removida do app).
   return res.status(410).json({
-    error: 'Cadastro público desativado. Peça para um administrador criar sua conta.',
+    error: 'Cadastro público desativado. Peça para um administrador ou coordenador criar sua conta.',
   });
 }
 

@@ -8,6 +8,7 @@ const authRoutes = require('./routes/auth.routes');
 const usersRoutes = require('./routes/users.routes');
 const materialRoutes = require('./routes/material.routes');
 const movimentacaoRoutes = require('./routes/movimentacao.routes');
+const solicitacaoRoutes = require('./routes/solicitacao.routes');
 
 const app = express();
 
@@ -25,6 +26,7 @@ app.use('/auth', authRoutes);
 app.use('/users', usersRoutes);
 app.use('/materiais', materialRoutes);
 app.use('/movimentacoes', movimentacaoRoutes);
+app.use('/solicitacoes', solicitacaoRoutes);
 
 app.get('/', (req, res) => {
   res.json({

@@ -27,7 +27,9 @@ export default function login(){
 
       await saveSession(token, user);
 
-      router.replace("/tela_inicial");
+      // O aluno tem uma versão reduzida do sistema: só a tela de
+      // Solicitações. Os demais perfis entram pela Tela Inicial.
+      router.replace(user?.role === "aluno" ? "/solicitacoes" : "/tela_inicial");
     } catch (error) {
       // Mensagem genérica
       setErrorMessage(error.message);

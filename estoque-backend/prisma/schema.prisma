@@ -8,17 +8,17 @@ datasource db {
 
 // ---------------------------------------------------------------
 // Hierarquia do sistema:
-//   super_admin -> admin (coordenador) -> professor -> aluno
+//   admin -> coordenador -> professor -> aluno
 //
-// - super_admin: único que pode criar contas de admin.
-// - admin (coordenador): cria/gerencia professores e materiais.
-// - professor: cria/gerencia alunos; confirma solicitações de item.
-// - aluno: loga com RM + email + senha; só vai poder solicitar itens
-//   (tela ainda não existe — fica pra depois).
+// - admin: único que pode criar contas de coordenador.
+// - coordenador: cria/gerencia professores e materiais.
+// - professor: cria/gerencia alunos; aprova/recusa solicitações de item.
+// - aluno: loga com RM + email + senha; só acessa a tela "Solicitações"
+//   (pedir materiais/EPIs e acompanhar os pedidos).
 // ---------------------------------------------------------------
 enum Role {
-  super_admin
   admin
+  coordenador
   professor
   aluno
 }
@@ -36,10 +36,10 @@ model User {
   rm String? @unique
 
   // Quem criou/gerencia esta conta:
-  //   super_admin -> criou o admin
-  //   admin       -> criou o professor
+  //   admin       -> criou o coordenador
+  //   coordenador -> criou o professor
   //   professor   -> criou o aluno
-  // Fica nulo só pro(s) super_admin(s), que não têm "dono".
+  // Fica nulo só pro(s) admin(s), que não têm "dono".
   criadoPorId Int?
   criadoPor   User?  @relation("HierarquiaUsuarios", fields: [criadoPorId], references: [id])
   gerenciados User[] @relation("HierarquiaUsuarios")
@@ -48,6 +48,11 @@ model User {
 
   materiaisCriados         Material[]
   movimentacoesRegistradas Movimentacao[]
+
+  // Solicitações que o aluno fez e solicitações que esta pessoa
+  // (professor/coordenador/admin) aprovou ou recusou.
+  solicitacoesFeitas      Solicitacao[] @relation("SolicitacaoAluno")
+  solicitacoesRespondidas Solicitacao[] @relation("SolicitacaoResponsavel")
 }
 
 model Material {
@@ -62,11 +67,12 @@ model Material {
   ca              String?
   ativo           Boolean   @default(true)
 
-  // Quem cadastrou o material (normalmente um admin/coordenador).
+  // Quem cadastrou o material (normalmente um coordenador).
   criadoPorId Int?
   criadoPor   User? @relation(fields: [criadoPorId], references: [id])
 
   movimentacoes Movimentacao[]
+  solicitacoes  Solicitacao[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -96,4 +102,52 @@ model Movimentacao {
   responsavel   User @relation(fields: [responsavelId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------
+// Solicitações de material feitas pelo aluno.
+//
+// Fluxo:
+//   pendente -> aprovada   (professor/coordenador/admin aprova: o estoque
+//                           é baixado e uma Movimentacao de saída é criada)
+//   pendente -> recusada   (com motivo opcional)
+//   pendente -> cancelada  (o próprio aluno desiste)
+//
+// Quem responder primeiro encerra o pedido: depois disso ninguém mais
+// consegue aprovar/recusar (ver solicitacao.controller.js).
+// ---------------------------------------------------------------
+enum StatusSolicitacao {
+  pendente
+  aprovada
+  recusada
+  cancelada
+}
+
+model Solicitacao {
+  id         Int               @id @default(autoincrement())
+  quantidade Int               // na mesma unidade de medida do material (ex: caixas)
+  observacao String?
+  status     StatusSolicitacao @default(pendente)
+
+  // Preenchido quando o pedido é recusado (opcional).
+  motivoRecusa String?
+
+  alunoId Int
+  // Cascade: se a conta do aluno for excluída, os pedidos dele vão junto.
+  // (O que já foi retirado do estoque continua registrado em Movimentacao.)
+  aluno   User @relation("SolicitacaoAluno", fields: [alunoId], references: [id], onDelete: Cascade)
+
+  materialId Int
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+
+  // Quem aprovou/recusou e quando (nulo enquanto estiver pendente/cancelada).
+  respondidoPorId Int?
+  respondidoPor   User?     @relation("SolicitacaoResponsavel", fields: [respondidoPorId], references: [id], onDelete: Restrict)
+  respondidoEm    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([alunoId])
+  @@index([status])
 }

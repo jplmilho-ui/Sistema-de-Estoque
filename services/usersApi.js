@@ -27,14 +27,14 @@ export async function listUsers(token) {
   return parseResponse(response); // { users }
 }
 
-export async function createUser(token, { name, email, password, role }) {
+export async function createUser(token, { name, email, password, role, rm }) {
   const response = await fetch(`${API_URL}/users`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ name, email, password, role }),
+    body: JSON.stringify({ name, email, password, role, rm }),
   });
   return parseResponse(response); // { user }
 }

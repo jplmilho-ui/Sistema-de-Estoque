@@ -1,7 +1,7 @@
 const prisma = require('../lib/prisma');
 
 // Middleware genérico pra rotas que podem ser acessadas por mais de um
-// papel (ex: retirar material pode ser admin OU professor).
+// papel (ex: retirar material pode ser admin, coordenador OU professor).
 //
 // Use sempre DEPOIS do authMiddleware (que já preenche req.userId).
 // Assim como o admin.middleware.js, consulta o banco de novo a cada
@@ -9,7 +9,7 @@ const prisma = require('../lib/prisma');
 // hora, caso o papel de alguém mude.
 //
 // Exemplo de uso:
-//   router.post('/:id/retirar', allowRoles('super_admin', 'admin', 'professor'), retirar);
+//   router.post('/:id/retirar', allowRoles('admin', 'coordenador', 'professor'), retirar);
 function allowRoles(...roles) {
   return async function roleMiddleware(req, res, next) {
     try {
