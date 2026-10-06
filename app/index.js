@@ -1,11 +1,19 @@
 import React, { useState } from 'react';
-import {View,Text,TextInput,TouchableOpacity,StyleSheet,ActivityIndicator,Image,Alert,
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Image,
+  Alert,
 } from 'react-native';
-import { router } from "expo-router";
-import { loginUser } from "../services/authApi";
-import { saveSession } from "../services/authStorage";
+import { router } from 'expo-router';
+import { loginUser } from '../services/authApi';
+import { saveSession } from '../services/authStorage';
 
-export default function login(){
+export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,18 +28,25 @@ export default function login(){
     }
 
     setLoading(true);
+
     try {
       // Vai até o backend, que consulta o usuário no banco de dados,
       // confere a senha (bcrypt.compare) e devolve o token JWT.
-      const { user, token } = await loginUser(email.trim(), password);
+      const { user, token } = await loginUser(
+        email.trim(),
+        password
+      );
 
       await saveSession(token, user);
 
       // O aluno tem uma versão reduzida do sistema: só a tela de
       // Solicitações. Os demais perfis entram pela Tela Inicial.
-      router.replace(user?.role === "aluno" ? "/solicitacoes" : "/tela_inicial");
+      router.replace(
+        user?.role === 'aluno'
+          ? '/solicitacoes'
+          : '/tela_inicial'
+      );
     } catch (error) {
-      // Mensagem genérica
       setErrorMessage(error.message);
     } finally {
       setLoading(false);
@@ -43,19 +58,30 @@ export default function login(){
       <View style={styles.card}>
 
         <Image
-          source={require("../assets/logo_sece_minimalista.png")}
+          source={require('../assets/logo_sece_minimalista.png')}
           style={styles.logo}
           resizeMode="contain"
         />
 
-        <Text style={styles.title}>Área de login</Text>
+        <Text style={styles.title}>
+          Área de login
+        </Text>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>
+            Email
+          </Text>
+
           <TextInput
             style={styles.input}
             value={email}
-            onChangeText={(text) => { setEmail(text); if (errorMessage) setErrorMessage(''); }}
+            onChangeText={(text) => {
+              setEmail(text);
+
+              if (errorMessage) {
+                setErrorMessage('');
+              }
+            }}
             keyboardType="email-address"
             autoCapitalize="none"
             editable={!loading}
@@ -63,11 +89,20 @@ export default function login(){
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Senha</Text>
+          <Text style={styles.label}>
+            Senha
+          </Text>
+
           <TextInput
             style={styles.input}
             value={password}
-            onChangeText={(text) => { setPassword(text); if (errorMessage) setErrorMessage(''); }}
+            onChangeText={(text) => {
+              setPassword(text);
+
+              if (errorMessage) {
+                setErrorMessage('');
+              }
+            }}
             secureTextEntry
             editable={!loading}
           />
@@ -78,25 +113,36 @@ export default function login(){
           disabled={loading}
           onPress={() =>
             Alert.alert(
-              "Em breve",
-              "A recuperação de senha ainda não foi implementada."
+              'Em breve',
+              'A recuperação de senha ainda não foi implementada.'
             )
           }
         >
-          <Text style={styles.forgotLink}>Esqueceu a senha?</Text>
+          <Text style={styles.forgotLink}>
+            Esqueceu a senha?
+          </Text>
         </TouchableOpacity>
 
-        {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
+        {!!errorMessage && (
+          <Text style={styles.errorText}>
+            {errorMessage}
+          </Text>
+        )}
 
         <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
+          style={[
+            styles.button,
+            loading && styles.buttonDisabled,
+          ]}
           onPress={handleLogin}
           disabled={loading}
         >
           {loading ? (
             <ActivityIndicator color="#1a1a1a" />
           ) : (
-            <Text style={styles.buttonText}>Login</Text>
+            <Text style={styles.buttonText}>
+              Login
+            </Text>
           )}
         </TouchableOpacity>
 
@@ -104,7 +150,6 @@ export default function login(){
     </View>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
@@ -128,7 +173,7 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontFamily: 'serif',
+    fontFamily: 'Inter',
     fontSize: 20,
     color: '#202124',
     textAlign: 'center',
@@ -144,6 +189,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#3c3c3c',
     marginBottom: 6,
+    fontFamily: 'Inter',
   },
 
   input: {
@@ -156,17 +202,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#202124',
     backgroundColor: '#ffffff',
+    fontFamily: 'Inter',
   },
 
   forgotWrapper: {
     width: '100%',
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     marginBottom: 24,
   },
 
   forgotLink: {
     fontSize: 12,
     color: '#3c3c3c',
+    fontFamily: 'Inter',
+    textDecorationLine: "underline"
   },
 
   errorText: {
@@ -175,6 +224,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: -12,
     marginBottom: 16,
+    fontFamily: 'Inter',
   },
 
   button: {
@@ -191,8 +241,9 @@ const styles = StyleSheet.create({
   },
 
   buttonText: {
-    color: '#1a1a1a',
+    color: '#101111',
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: 'Inter',
   },
 });
