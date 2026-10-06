@@ -67,6 +67,11 @@ export default function Materiais() {
   // Quantas "unidadeMedida" existem em estoque (ex: 4 caixas)
   const [quantidade, setQuantidade] = useState("");
 
+  // Estoque mínimo (mesma unidade da quantidade). Quando a quantidade em
+  // estoque chega a esse valor ou menos, a tela de Estoque avisa
+  // "Estoque baixo". Vazio ou 0 = sem alerta.
+  const [estoqueMinimo, setEstoqueMinimo] = useState("");
+
   const [validade, setValidade] = useState("");
   const [ca, setCa] = useState("");
 
@@ -159,6 +164,7 @@ export default function Materiais() {
     setUnidadeCustom("");
     setFatorConversao("1");
     setQuantidade("");
+    setEstoqueMinimo("");
     setValidade("");
     setCa("");
     setFormError("");
@@ -182,6 +188,7 @@ export default function Materiais() {
 
     setFatorConversao(String(material.fatorConversao));
     setQuantidade(String(material.quantidade));
+    setEstoqueMinimo(material.estoqueMinimo ? String(material.estoqueMinimo) : "");
     setValidade(material.validade || "");
     setCa(material.ca || "");
     setFormError("");
@@ -206,6 +213,13 @@ export default function Materiais() {
       Number(quantidade) < 0
     ) {
       return "Quantidade precisa ser um número válido.";
+    }
+
+    if (
+      estoqueMinimo.trim() &&
+      (!/^\d+$/.test(estoqueMinimo.trim()) || Number(estoqueMinimo) > 1000000)
+    ) {
+      return "Estoque mínimo precisa ser um número inteiro (0 ou mais).";
     }
 
     if (unidadeMedida !== "Unidade") {
@@ -260,6 +274,7 @@ export default function Materiais() {
         unidadeMedida: unidadeFinal(),
         fatorConversao,
         quantidade,
+        estoqueMinimo: estoqueMinimo.trim() || "0",
         validade,
         ca,
       };
@@ -398,6 +413,7 @@ export default function Materiais() {
   <AppBar>
     <PageHeader
       title="Materiais"
+        subtitle="Cadastre e gerencie os tipos de material do laboratório."
       actions={
         <>
           <SearchBox
@@ -537,6 +553,23 @@ export default function Materiais() {
                 Total em estoque: {totalCalculado} unidades
               </Text>
             )}
+
+            <TextInput
+              style={styles.input}
+              placeholder={`Estoque mínimo em ${
+                unidadeMedida === "Unidade"
+                  ? "unidades"
+                  : `${(unidadeSelecionada || "embalagem").toLowerCase()}s`
+              } (opcional)`}
+              value={estoqueMinimo}
+              onChangeText={(texto) => setEstoqueMinimo(texto.replace(/\D/g, ""))}
+              keyboardType="numeric"
+              editable={!saving}
+            />
+            <Text style={styles.helperText}>
+              Quando o estoque chegar a esse valor ou menos, o item aparece com
+              alerta de "Estoque baixo". Deixe vazio para não alertar.
+            </Text>
 
             <TextInput
               style={styles.input}

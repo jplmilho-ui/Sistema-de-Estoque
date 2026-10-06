@@ -2,12 +2,13 @@
 //   - abre ancorado embaixo do sino, com cabeçalho e "Marcar todas como lidas"
 //   - bolinha verde nas não lidas + fundo levemente destacado
 //   - ícone redondo à esquerda, título, texto e tempo
-//   - fecha clicando fora, no "✕" ou ao escolher uma notificação
+//   - fecha clicando fora, no "X" ou ao escolher uma notificação
 //   - itens agrupados por assunto; as solicitações de alunos vêm em PRIMEIRO
 //   - nas solicitações pendentes, professor/coordenador/admin podem
 //     Aprovar ou Recusar (com motivo opcional) direto aqui
 //   - o aluno só vê o aviso de solicitação aprovada
 import { useState } from "react";
+import Icon from "./Icon";
 import {
   View,
   Text,
@@ -23,16 +24,16 @@ import {
 const TOP_OFFSET = 78; // logo abaixo do sino (a barra superior tem 100 de altura)
 const SIDE_MARGIN = 12;
 
-// ícone + cores de cada tipo de notificação
+// ícone (contorno) + cores de cada tipo de notificação
 const TIPOS = {
-  vencido: { icon: "⚠️", bg: "#fdeceb" },
-  proximo: { icon: "⏳", bg: "#fff4e0" },
-  "sem-estoque": { icon: "📭", bg: "#eeeeee" },
-  entrada: { icon: "📥", bg: "#e6f4ea" },
-  saida: { icon: "📤", bg: "#e8f0fe" },
-  solicitacao: { icon: "🙋", bg: "#e8f0fe" },
-  aprovada: { icon: "✅", bg: "#e6f4ea" },
-  recusada: { icon: "❌", bg: "#fdeceb" },
+  vencido: { icon: "alert-triangle", color: "#c62828", bg: "#fdeceb" },
+  proximo: { icon: "clock", color: "#b26a00", bg: "#fff4e0" },
+  "sem-estoque": { icon: "inbox", color: "#5f6368", bg: "#eeeeee" },
+  entrada: { icon: "arrow-up", color: "#1b6b3a", bg: "#e6f4ea" },
+  saida: { icon: "arrow-down", color: "#1a56c4", bg: "#e8f0fe" },
+  solicitacao: { icon: "user", color: "#1a56c4", bg: "#e8f0fe" },
+  aprovada: { icon: "check-circle", color: "#1b6b3a", bg: "#e6f4ea" },
+  recusada: { icon: "x-circle", color: "#c62828", bg: "#fdeceb" },
 };
 
 // Ordem dos grupos = ordem de prioridade (solicitações primeiro).
@@ -176,7 +177,7 @@ export default function NotificationsPopup({
               accessibilityLabel="Fechar notificações"
               style={({ hovered }) => [styles.closeButton, hovered && styles.closeButtonHover]}
             >
-              <Text style={styles.closeText}>✕</Text>
+              <Icon name="x" size={16} color="#ffffff" />
             </Pressable>
           </View>
         </View>
@@ -216,7 +217,9 @@ export default function NotificationsPopup({
 
           {!primeiraCarga && !error && visiveis.length === 0 && (
             <View style={styles.centerBox}>
-              <Text style={styles.emptyIcon}>🔔</Text>
+              <View style={styles.emptyIcon}>
+                <Icon name="bell" size={32} color="#9aa0a6" />
+              </View>
               <Text style={styles.emptyTitle}>
                 {aba === "naoLidas" ? "Tudo em dia" : "Nenhuma notificação"}
               </Text>
@@ -258,7 +261,7 @@ export default function NotificationsPopup({
                           </View>
 
                           <View style={[styles.iconCircle, { backgroundColor: tipo.bg }]}>
-                            <Text style={styles.iconText}>{tipo.icon}</Text>
+                            <Icon name={tipo.icon} size={20} color={tipo.color} />
                           </View>
 
                           <View style={styles.itemBody}>
@@ -355,10 +358,6 @@ const styles = StyleSheet.create({
   },
   closeButtonHover: {
     backgroundColor: "rgba(255, 255, 255, 0.14)",
-  },
-  closeText: {
-    fontSize: 13,
-    color: "#ffffff",
   },
 
   // abas
@@ -499,9 +498,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
   },
-  iconText: {
-    fontSize: 18,
-  },
   itemBody: {
     flex: 1,
     minWidth: 0,
@@ -533,9 +529,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   emptyIcon: {
-    fontSize: 28,
     marginBottom: 8,
-    opacity: 0.6,
   },
   emptyTitle: {
     fontSize: 14,

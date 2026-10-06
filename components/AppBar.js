@@ -3,17 +3,18 @@ import { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { router, usePathname } from "expo-router";
 import { clearSession, getSession } from "../services/authStorage";
+import Icon from "./Icon";
 import NotificationsPopup from "./NotificationsPopup";
 import useNotificacoes from "./useNotificacoes";
 
 
 
-const NAV_TELA_INICIAL = { label: "Tela inicial", href: "/tela_inicial", icon: "🏠" };
-const NAV_ESTOQUE = { label: "Estoque", href: "/estoque", icon: "📦" };
-const NAV_USUARIOS = { label: "Usuários", href: "/usuarios", icon: "👥" };
-const NAV_MATERIAIS = { label: "Materiais", href: "/materiais", icon: "🗂️" };
-const NAV_MOVIMENTACOES = { label: "Movimentações", href: "/movimentacoes", icon: "🔄" };
-const NAV_SOLICITACOES = { label: "Solicitações", href: "/solicitacoes", icon: "📝" };
+const NAV_TELA_INICIAL = { label: "Tela inicial", href: "/tela_inicial", icon: "home" };
+const NAV_ESTOQUE = { label: "Estoque", href: "/estoque", icon: "package" };
+const NAV_USUARIOS = { label: "Usuários", href: "/usuarios", icon: "users" };
+const NAV_MATERIAIS = { label: "Materiais", href: "/materiais", icon: "layers" };
+const NAV_MOVIMENTACOES = { label: "Movimentações", href: "/movimentacoes", icon: "repeat" };
+const NAV_SOLICITACOES = { label: "Solicitações", href: "/solicitacoes", icon: "file-text" };
 
 export default function AppBar({ children }) {
   const pathname = usePathname();
@@ -100,7 +101,7 @@ export default function AppBar({ children }) {
             onPress={openNotifications}
             accessibilityLabel="Notificações"
           >
-            <Text style={styles.notificationIcon}>🔔</Text>
+            <Icon name="bell" size={24} color="#ffffff" />
             {notifications.unreadCount > 0 && (
               <View style={styles.notificationBadge}>
                 <Text style={styles.notificationBadgeText}>
@@ -146,7 +147,11 @@ export default function AppBar({ children }) {
                     disabled={!item.href}
                     onPress={() => item.href && router.push(item.href)}
                   >
-                    <Text style={styles.navIcon}>{item.icon}</Text>
+                    <Icon
+                      name={item.icon}
+                      size={18}
+                      color={active ? "#ffffff" : "#cfe3da"}
+                    />
                     <Text style={[styles.navText, active && styles.navTextActive]}>
                       {item.label}
                     </Text>
@@ -160,7 +165,7 @@ export default function AppBar({ children }) {
 
           <View style={styles.navSair}>
             <TouchableOpacity style={styles.navItem} onPress={handleLogout}>
-              <Text style={styles.navIcon}>🚪</Text>
+              <Icon name="log-out" size={18} color="#cfe3da" />
               <Text style={styles.navText}>Sair</Text>
             </TouchableOpacity>
           </View>
@@ -214,9 +219,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  notificationIcon: {
-    fontSize: 16,
-  },
   // Contador de não lidas (estilo YouTube: bolinha vermelha com número)
   notificationBadge: {
     position: "absolute",
@@ -264,9 +266,6 @@ const styles = StyleSheet.create({
   },
   navItemActive: {
     backgroundColor: "#2E7D5C",
-  },
-  navIcon: {
-    fontSize: 15,
   },
   navText: {
     fontSize: 14,

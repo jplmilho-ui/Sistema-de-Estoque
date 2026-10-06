@@ -20,10 +20,12 @@ import ExcelJS from "exceljs/dist/exceljs.min.js";
 import AppBar from "../components/AppBar";
 import PageHeader from "../components/PageHeader";
 import SearchBox from "../components/SearchBox";
+import LowStockIndicator from "../components/LowStockIndicator";
 
 import { getSession } from "../services/authStorage";
 import { listMaterials, retirarMaterial, devolverMaterial } from "../services/materialApi";
 import { isVencido } from "../utils/validade";
+import { isEstoqueBaixo, textoEstoqueBaixo } from "../utils/estoque";
 
 // Papéis que podem ver e movimentar o Estoque. Diferente da tela de
 // Materiais (administrativa), aqui admin, coordenador e professor podem
@@ -31,13 +33,19 @@ import { isVencido } from "../utils/validade";
 // cadastro dos tipos de material (isso é feito em Materiais).
 const PAPEIS_PERMITIDOS = ["admin", "coordenador", "professor"];
 
+// Maior quantidade permitida por retirada/adição (o backend usa o mesmo
+// limite). Segura digitação errada, tipo um zero a mais.
+const MOVIMENTACAO_QUANTIDADE_MAXIMA = 1000000;
+
 // Define as colunas da tabela (nome, flex de largura).
+// Nome e Quantidade têm mais espaço; Validade e Categoria ficam médias e
+// C.A. é a menor (guarda só um número curto).
 const COLUMNS = [
-  { key: "nome", label: "Nome", flex: 2 },
-  { key: "quantidade", label: "Quantidade", flex: 1.3 },
-  { key: "validade", label: "Validade", flex: 1.1 },
-  { key: "categoria", label: "Categoria", flex: 1 },
-  { key: "ca", label: "C.A", flex: 0.8 },
+  { key: "nome", label: "Nome", flex: 2.6 },
+  { key: "quantidade", label: "Quantidade", flex: 2.2 },
+  { key: "validade", label: "Validade", flex: 1.3 },
+  { key: "categoria", label: "Categoria", flex: 1.3 },
+  { key: "ca", label: "C.A", flex: 0.7 },
 ];
 
 // Opções do filtro por categoria (as categorias "EPI" e "Uniforme" são as
@@ -205,16 +213,25 @@ export default function Estoque() {
       )
     : materials;
 
-  // Filtro por categoria (EPI / Uniforme), aplicado por cima da busca.
-  const materialsAposCategoria =
-    categoriaFiltro === "todas"
-      ? materialsAposBusca
-      : materialsAposBusca.filter((material) => material.categoria === categoriaFiltro);
+  // Se o filtro "só vencidos" estiver ativo, aplica por cima da busca.
+  const materialsBase = mostrarSoVencidos
+    ? materialsAposBusca.filter((material) => isVencido(material.validade))
+    : materialsAposBusca;
 
-  // Se o filtro "só vencidos" estiver ativo, aplica por cima dos outros.
-  const filteredMaterials = mostrarSoVencidos
-    ? materialsAposCategoria.filter((material) => isVencido(material.validade))
-    : materialsAposCategoria;
+  // Quantidade de itens de cada categoria dentro do que a busca (e o
+  // filtro de vencidos) já deixou passar — é exatamente o número de
+  // linhas que aparece ao clicar naquela opção.
+  const contagemPorCategoria = {
+    todas: materialsBase.length,
+    EPI: materialsBase.filter((material) => material.categoria === "EPI").length,
+    Uniforme: materialsBase.filter((material) => material.categoria === "Uniforme").length,
+  };
+
+  // Filtro por categoria (EPI / Uniforme), aplicado por último.
+  const filteredMaterials =
+    categoriaFiltro === "todas"
+      ? materialsBase
+      : materialsBase.filter((material) => material.categoria === categoriaFiltro);
 
   // O item selecionado só vale enquanto estiver visível na lista — assim,
   // ao trocar o filtro ou a busca, "Adicionar/Retirar item" nunca age
@@ -419,6 +436,8 @@ export default function Estoque() {
   // CONFIRMAR ADICIONAR/RETIRAR
 
   async function handleConfirmMovement() {
+    if (movementSaving) return; // evita enviar duas vezes (ex: Enter + clique)
+
     setMovementError("");
 
     if (!selectedMaterial) {
@@ -426,10 +445,26 @@ export default function Estoque() {
       return;
     }
 
-    const quantidade = Number(movementQuantidade);
+    // Só número inteiro maior que zero (nada de "2,5", "1e3" ou texto).
+    const texto = movementQuantidade.trim();
 
-    if (!movementQuantidade.trim() || Number.isNaN(quantidade) || quantidade <= 0) {
-      setMovementError("Informe uma quantidade válida, maior que zero.");
+    if (!/^\d+$/.test(texto) || Number(texto) <= 0) {
+      setMovementError("Informe uma quantidade válida: um número inteiro maior que zero.");
+      return;
+    }
+
+    const quantidade = Number(texto);
+
+    if (quantidade > MOVIMENTACAO_QUANTIDADE_MAXIMA) {
+      setMovementError(`A quantidade máxima por operação é ${MOVIMENTACAO_QUANTIDADE_MAXIMA}.`);
+      return;
+    }
+
+    // Avisa antes de ir ao servidor (o backend confere de novo).
+    if (movement.tipo === "retirar" && quantidade > selectedMaterial.quantidade) {
+      setMovementError(
+        `Estoque insuficiente. Disponível: ${selectedMaterial.quantidade} ${selectedMaterial.unidadeMedida.toLowerCase()}(s).`
+      );
       return;
     }
 
@@ -456,6 +491,13 @@ export default function Estoque() {
             movement.tipo === "retirar" ? "retirar" : "adicionar"
           } a quantidade.`
       );
+
+      // Se o servidor recusou, a lista na tela pode estar desatualizada
+      // (outra pessoa mexeu no estoque). Atualiza os números por baixo,
+      // sem fechar o modal nem piscar a tabela.
+      listMaterials(session.token, { ativo: true })
+        .then((response) => setMaterials(response.materials || []))
+        .catch(() => {});
     } finally {
       setMovementSaving(false);
     }
@@ -469,6 +511,7 @@ export default function Estoque() {
     <AppBar>
       <PageHeader
         title="Estoque"
+        subtitle="Gerencie os materiais disponíveis no laboratório."
         actions={
           <>
             <TouchableOpacity
@@ -517,6 +560,16 @@ export default function Estoque() {
               >
                 {opcao.label}
               </Text>
+              <View style={[styles.categoriaCount, ativo && styles.categoriaCountActive]}>
+                <Text
+                  style={[
+                    styles.categoriaCountText,
+                    ativo && styles.categoriaCountTextActive,
+                  ]}
+                >
+                  {contagemPorCategoria[opcao.key]}
+                </Text>
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -533,8 +586,8 @@ export default function Estoque() {
 
       <ScrollView style={styles.Space} contentContainerStyle={{ paddingBottom: 30 }}>
         <View style={styles.table}>
-          {/* Cabeçalho da tabela */}
-          <View style={styles.row}>
+          {/* Cabeçalho da tabela (fundo cinza, texto em maiúsculas) */}
+          <View style={styles.headerRow}>
             <View style={styles.checkboxColumn} />
             {COLUMNS.map((col) => (
               <Text key={col.key} style={[styles.headerCell, { flex: col.flex }]}>
@@ -589,6 +642,7 @@ export default function Estoque() {
             filteredMaterials.map((material) => {
               const selected = material.id === selectedId;
               const vencido = isVencido(material.validade);
+              const estoqueBaixo = isEstoqueBaixo(material);
               return (
                 <TouchableOpacity
                   key={material.id}
@@ -605,15 +659,33 @@ export default function Estoque() {
                       ]}
                     />
                   </View>
-                  {COLUMNS.map((col) => (
-                    <Text
-                      key={col.key}
-                      style={[styles.cell, { flex: col.flex }, vencido && styles.cellVencido]}
-                      numberOfLines={1}
-                    >
-                      {cellValue(material, col.key)}
-                    </Text>
-                  ))}
+                  {COLUMNS.map((col) =>
+                    col.key === "quantidade" && estoqueBaixo ? (
+                      // Quantidade + bolinha laranja de "Estoque baixo" (o
+                      // aviso aparece ao passar o mouse). Vem do estoque
+                      // mínimo cadastrado em Materiais.
+                      <View key={col.key} style={[styles.cellWithIndicator, { flex: col.flex }]}>
+                        <Text
+                          style={[styles.cellInline, vencido && styles.cellVencido]}
+                          numberOfLines={1}
+                        >
+                          {cellValue(material, col.key)}
+                        </Text>
+                        <LowStockIndicator
+                          label={textoEstoqueBaixo(material)}
+                          onPress={() => toggleSelect(material.id)}
+                        />
+                      </View>
+                    ) : (
+                      <Text
+                        key={col.key}
+                        style={[styles.cell, { flex: col.flex }, vencido && styles.cellVencido]}
+                        numberOfLines={1}
+                      >
+                        {cellValue(material, col.key)}
+                      </Text>
+                    )
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -650,9 +722,15 @@ export default function Estoque() {
                   : "Quantidade"
               }
               value={movementQuantidade}
-              onChangeText={setMovementQuantidade}
+              onChangeText={(texto) => {
+                // só dígitos; some o erro antigo assim que a pessoa corrige
+                setMovementQuantidade(texto.replace(/\D/g, ""));
+                if (movementError) setMovementError("");
+              }}
               keyboardType="numeric"
+              maxLength={7}
               editable={!movementSaving}
+              onSubmitEditing={handleConfirmMovement}
               autoFocus
             />
 
@@ -701,18 +779,19 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontWeight: "600",
   },
-  // "Retirar item": cinza escuro (#495057)
+  // "Retirar item": fundo branco com borda cinza escura (#495057) — o
+  // verde fica reservado só para a ação principal ("Adicionar item").
   retirarButton: {
     borderWidth: 1,
     borderColor: "#495057",
     borderRadius: 4,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: "#495057",
+    backgroundColor: "#ffffff",
   },
   retirarButtonText: {
     fontSize: 13,
-    color: "#ffffff",
+    color: "#495057",
     fontWeight: "600",
   },
   // "Gerar relatório": mesmas cores do botão "Novo material" (Materiais)
@@ -744,11 +823,15 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   categoriaChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     borderWidth: 1,
     borderColor: "#c9c9c9",
     borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingLeft: 14,
+    paddingRight: 8,
+    paddingVertical: 5,
     backgroundColor: "#ffffff",
   },
   categoriaChipActive: {
@@ -763,9 +846,30 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontWeight: "600",
   },
+  // contador de itens dentro do chip ("Todas 4")
+  categoriaCount: {
+    minWidth: 22,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    backgroundColor: "#eeeeee",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  categoriaCountActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
+  },
+  categoriaCountText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#5f6368",
+  },
+  categoriaCountTextActive: {
+    color: "#ffffff",
+  },
   Space: {
     paddingHorizontal: 24,
-    paddingTop: 8,
+    paddingTop: 24,
   },
   filtroChip: {
     flexDirection: "row",
@@ -790,18 +894,32 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textDecorationLine: "underline",
   },
+  // Tabela ocupa toda a largura disponível (igual à tela de Materiais),
+  // com cantos arredondados e borda clara. O overflow "hidden" faz o
+  // fundo cinza do cabeçalho respeitar o arredondamento.
   table: {
+    width: "100%",
     borderWidth: 1,
-    borderColor: "#cccccc",
-    borderRadius: 4,
+    borderColor: "#e6e6e6",
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: "#ffffff",
+  },
+  // Cabeçalho: fundo cinza claro como na tela de Materiais
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#f5f6f6",
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 18,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: "#ececec",
   },
   checkboxColumn: {
     width: 32,
@@ -827,17 +945,30 @@ const styles = StyleSheet.create({
     borderColor: "#ffffff",
   },
   headerCell: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
-    color: "#1a1a1a",
+    color: "#5f6368",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   headerRule: {
     height: 1,
-    backgroundColor: "#999999",
+    backgroundColor: "#e6e6e6",
   },
   cell: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#1a1a1a",
+  },
+  // célula da quantidade quando há bolinha de "Estoque baixo" ao lado
+  cellWithIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    minWidth: 0,
+  },
+  cellInline: {
+    fontSize: 14,
+    color: "#1a1a1a",
+    flexShrink: 1,
   },
   centerBox: {
     paddingVertical: 24,

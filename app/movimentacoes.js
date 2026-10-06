@@ -220,6 +220,7 @@ export default function Movimentacoes() {
     <AppBar>
       <PageHeader
         title="Movimentações"
+        subtitle="Acompanhe as entradas e saídas de materiais do estoque."
         actions={
           <>
             <TouchableOpacity
@@ -596,9 +597,11 @@ const styles = StyleSheet.create({
   },
 
   // Botão "Gerar PDF" (mesmo visual do "Gerar relatório" do Estoque)
+  // "Gerar PDF": mesmas cores do "Gerar relatório" (Estoque) e do
+  // "Novo material" (Materiais) — fundo branco, borda e texto vermelhos.
   pdfButton: {
     borderWidth: 1,
-    borderColor: "#a9a9a9",
+    borderColor: "#ed0000",
     borderRadius: 4,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -606,7 +609,8 @@ const styles = StyleSheet.create({
   },
   pdfButtonText: {
     fontSize: 13,
-    color: "#1a1a1a",
+    color: "#ed0000",
+    fontWeight: "600",
   },
   buttonDisabled: {
     opacity: 0.5,

@@ -296,6 +296,7 @@ export default function Solicitacoes() {
     <AppBar>
       <PageHeader
         title="Solicitações"
+        subtitle="Peça materiais e acompanhe o andamento dos seus pedidos."
         actions={
           <TouchableOpacity style={styles.newButton} onPress={toggleForm}>
             <Text style={styles.newButtonText}>

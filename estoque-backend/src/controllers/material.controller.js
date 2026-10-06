@@ -52,6 +52,10 @@ function normalizePayload(body) {
 
   const quantidade = Number(body.quantidade) || 0;
 
+  // Vazio/ausente = 0 (sem alerta de estoque baixo). A validação já
+  // garantiu que, se veio preenchido, é um inteiro válido.
+  const estoqueMinimo = Number(body.estoqueMinimo) || 0;
+
   return {
     nome: (body.nome || '').trim(),
     categoria: body.categoria,
@@ -59,10 +63,13 @@ function normalizePayload(body) {
     fatorConversao,
     quantidade,
     quantidadeTotal: quantidade * fatorConversao,
+    estoqueMinimo,
     validade: parseDataBR(body.validade),
     ca: body.ca?.trim() || null,
   };
 }
+
+const ESTOQUE_MINIMO_MAXIMO = 1000000;
 
 function validatePayload(body) {
   if (!body.nome || !body.nome.trim()) {
@@ -79,6 +86,19 @@ function validatePayload(body) {
     Number(body.quantidade) < 0
   ) {
     return 'Quantidade precisa ser um número válido.';
+  }
+
+  // Estoque mínimo é opcional (vazio = sem alerta), mas se vier
+  // preenchido precisa ser um número inteiro, de 0 até o limite.
+  if (
+    body.estoqueMinimo !== undefined &&
+    body.estoqueMinimo !== null &&
+    String(body.estoqueMinimo).trim() !== ''
+  ) {
+    const minimo = Number(body.estoqueMinimo);
+    if (!Number.isInteger(minimo) || minimo < 0 || minimo > ESTOQUE_MINIMO_MAXIMO) {
+      return `Estoque mínimo precisa ser um número inteiro entre 0 e ${ESTOQUE_MINIMO_MAXIMO}.`;
+    }
   }
 
   // Bloqueia datas absurdas (ex: "1500", digitado por engano em vez de
@@ -240,96 +260,175 @@ async function deleteMaterial(req, res) {
 //   (essas são as ações da tela de Estoque: "Retirar item" e
 //   "Adicionar item" — os três papéis podem movimentar quantidade,
 //   mesmo quem não administra o cadastro de materiais)
+//
+// Como funciona (igual à aprovação de solicitações):
+//   tudo roda numa transação e a alteração do saldo é CONDICIONAL —
+//   "só baixa se ainda houver quantidade suficiente" é decidido pelo
+//   próprio banco, no mesmo comando que altera o saldo. Assim, duas
+//   pessoas retirando ao mesmo tempo nunca passam do que existe em
+//   estoque, e uma devolução nunca apaga a outra (o saldo é
+//   incrementado/decrementado, não sobrescrito com um valor lido antes).
 // ---------------------------------------------------------------
 
-async function retirar(req, res) {
-  try {
-    const id = Number(req.params.id);
-    const quantidade = Number(req.body.quantidade);
+// Maior número que cabe num campo Int do banco (4 bytes).
+const INT_MAXIMO = 2147483647;
 
-    if (!Number.isInteger(id)) {
-      return res.status(400).json({ error: 'Id inválido.' });
-    }
-    if (!Number.isFinite(quantidade) || quantidade <= 0) {
-      return res.status(400).json({ error: 'Informe uma quantidade válida, maior que zero.' });
-    }
+// Teto por operação: segura digitação errada (ex: um "0" a mais) e
+// evita estourar o campo Int do banco.
+const MOVIMENTACAO_QUANTIDADE_MAXIMA = 1000000;
 
-    const material = await prisma.material.findUnique({ where: { id } });
+// Erro "esperado" (regra de negócio) com o status HTTP que deve voltar.
+class ErroMovimentacao extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
+// Aceita só número inteiro maior que zero. Recusa decimal ("2.5"),
+// notação científica ("1e3"), texto, vazio e negativo.
+function lerQuantidadeMovimentacao(valor) {
+  const texto = String(valor ?? '').trim();
+
+  if (!/^\d+$/.test(texto) || Number(texto) <= 0) {
+    throw new ErroMovimentacao(
+      400,
+      'Informe uma quantidade válida: um número inteiro maior que zero.'
+    );
+  }
+
+  const quantidade = Number(texto);
+  if (quantidade > MOVIMENTACAO_QUANTIDADE_MAXIMA) {
+    throw new ErroMovimentacao(
+      400,
+      `A quantidade máxima por operação é ${MOVIMENTACAO_QUANTIDADE_MAXIMA}.`
+    );
+  }
+
+  return quantidade;
+}
+
+function erroEstoqueInsuficiente(material) {
+  return new ErroMovimentacao(
+    400,
+    `Estoque insuficiente. Disponível: ${material.quantidade} ${material.unidadeMedida.toLowerCase()}(s).`
+  );
+}
+
+// tipo: 'saida' (retirar) ou 'entrada' (devolver/adicionar).
+// Devolve { materialAtualizado, movimentacao } ou lança ErroMovimentacao.
+async function movimentarEstoque({ id, quantidade, tipo, responsavelId }) {
+  const saida = tipo === 'saida';
+
+  return prisma.$transaction(async (tx) => {
+    const material = await tx.material.findUnique({ where: { id } });
+
     if (!material) {
-      return res.status(404).json({ error: 'Material não encontrado.' });
+      throw new ErroMovimentacao(404, 'Material não encontrado.');
     }
     if (!material.ativo) {
-      return res.status(400).json({ error: 'Esse material está inativo.' });
+      throw new ErroMovimentacao(400, 'Esse material está inativo.');
     }
-    if (material.quantidade < quantidade) {
-      return res.status(400).json({
-        error: `Estoque insuficiente. Disponível: ${material.quantidade} ${material.unidadeMedida.toLowerCase()}(s).`,
+
+    // Mensagem clara logo de cara (a trava de verdade é a condição do
+    // updateMany logo abaixo, que vale mesmo com outra pessoa mexendo).
+    if (saida && material.quantidade < quantidade) {
+      throw erroEstoqueInsuficiente(material);
+    }
+    if (
+      !saida &&
+      (material.quantidade + quantidade) * material.fatorConversao > INT_MAXIMO
+    ) {
+      throw new ErroMovimentacao(
+        400,
+        'Essa quantidade deixaria o total em estoque grande demais. Confira o número digitado.'
+      );
+    }
+
+    // quantidadeTotal = quantidade * fatorConversao, então os dois
+    // mudam na mesma proporção.
+    const total = quantidade * material.fatorConversao;
+
+    const alterado = await tx.material.updateMany({
+      where: {
+        id,
+        ativo: true,
+        // se alguém editou o fator de conversão agora há pouco, o
+        // cálculo acima ficou velho — melhor recusar do que gravar errado
+        fatorConversao: material.fatorConversao,
+        ...(saida ? { quantidade: { gte: quantidade } } : {}),
+      },
+      data: saida
+        ? {
+            quantidade: { decrement: quantidade },
+            quantidadeTotal: { decrement: total },
+          }
+        : {
+            quantidade: { increment: quantidade },
+            quantidadeTotal: { increment: total },
+          },
+    });
+
+    if (alterado.count === 0) {
+      // Outra pessoa mexeu no material entre a leitura e a gravação.
+      // Lança o erro (desfaz a transação) explicando o que aconteceu.
+      const atual = await tx.material.findUnique({ where: { id } });
+
+      if (!atual) {
+        throw new ErroMovimentacao(404, 'Material não encontrado.');
+      }
+      if (!atual.ativo) {
+        throw new ErroMovimentacao(400, 'Esse material está inativo.');
+      }
+      if (saida && atual.quantidade < quantidade) {
+        throw erroEstoqueInsuficiente(atual);
+      }
+      throw new ErroMovimentacao(
+        409,
+        'Esse material foi alterado por outra pessoa agora há pouco. Atualize a lista e tente de novo.'
+      );
+    }
+
+    const movimentacao = await tx.movimentacao.create({
+      data: { tipo, quantidade, materialId: id, responsavelId },
+    });
+
+    const materialAtualizado = await tx.material.findUnique({ where: { id } });
+
+    return { materialAtualizado, movimentacao };
+  });
+}
+
+function criarHandlerMovimentacao(tipo, mensagemErro) {
+  return async function handlerMovimentacao(req, res) {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        throw new ErroMovimentacao(400, 'Id inválido.');
+      }
+
+      const quantidade = lerQuantidadeMovimentacao(req.body?.quantidade);
+
+      const { materialAtualizado, movimentacao } = await movimentarEstoque({
+        id,
+        quantidade,
+        tipo,
+        responsavelId: req.userId,
       });
+
+      return res.json({ material: serializeMaterial(materialAtualizado), movimentacao });
+    } catch (error) {
+      if (error instanceof ErroMovimentacao) {
+        return res.status(error.status).json({ error: error.message });
+      }
+      console.error(error);
+      return res.status(500).json({ error: mensagemErro });
     }
-
-    const novaQuantidade = material.quantidade - quantidade;
-
-    const [materialAtualizado, movimentacao] = await prisma.$transaction([
-      prisma.material.update({
-        where: { id },
-        data: {
-          quantidade: novaQuantidade,
-          quantidadeTotal: novaQuantidade * material.fatorConversao,
-        },
-      }),
-      prisma.movimentacao.create({
-        data: { tipo: 'saida', quantidade, materialId: id, responsavelId: req.userId },
-      }),
-    ]);
-
-    return res.json({ material: serializeMaterial(materialAtualizado), movimentacao });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'Erro ao retirar material.' });
-  }
+  };
 }
 
-async function devolver(req, res) {
-  try {
-    const id = Number(req.params.id);
-    const quantidade = Number(req.body.quantidade);
-
-    if (!Number.isInteger(id)) {
-      return res.status(400).json({ error: 'Id inválido.' });
-    }
-    if (!Number.isFinite(quantidade) || quantidade <= 0) {
-      return res.status(400).json({ error: 'Informe uma quantidade válida, maior que zero.' });
-    }
-
-    const material = await prisma.material.findUnique({ where: { id } });
-    if (!material) {
-      return res.status(404).json({ error: 'Material não encontrado.' });
-    }
-    if (!material.ativo) {
-      return res.status(400).json({ error: 'Esse material está inativo.' });
-    }
-
-    const novaQuantidade = material.quantidade + quantidade;
-
-    const [materialAtualizado, movimentacao] = await prisma.$transaction([
-      prisma.material.update({
-        where: { id },
-        data: {
-          quantidade: novaQuantidade,
-          quantidadeTotal: novaQuantidade * material.fatorConversao,
-        },
-      }),
-      prisma.movimentacao.create({
-        data: { tipo: 'entrada', quantidade, materialId: id, responsavelId: req.userId },
-      }),
-    ]);
-
-    return res.json({ material: serializeMaterial(materialAtualizado), movimentacao });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'Erro ao devolver material.' });
-  }
-}
+const retirar = criarHandlerMovimentacao('saida', 'Erro ao retirar material.');
+const devolver = criarHandlerMovimentacao('entrada', 'Erro ao devolver material.');
 
 // ---------------------------------------------------------------
 // RESUMO — números reais pra Tela Inicial (antes eram fixos: 5, 3, 1).

@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import AppBar from "../components/AppBar";
 import PageHeader from "../components/PageHeader";
+import Icon from "../components/Icon";
 import { getSession } from "../services/authStorage";
 import { getResumo, listMaterials } from "../services/materialApi";
-// TODO: quando existir o endpoint de movimentações, importar aqui, ex:
-// import { listMovimentacoes } from "../services/movimentacaoApi";
+import { listMovimentacoes } from "../services/movimentacoesApi";
 import { isVencido } from "../utils/validade";
+
+// Quantas movimentações aparecem no painel "Últimas movimentações".
+const MAX_ULTIMAS_MOVIMENTACOES = 5;
 
 // Mesmas categorias usadas no cadastro de Materiais — fixas, pra o
 // gráfico sempre mostrar as três colunas, mesmo com contagem zero.
@@ -36,10 +39,12 @@ export default function tela_inicial() {
   const [loadingMaterials, setLoadingMaterials] = useState(true);
   const [materialsError, setMaterialsError] = useState("");
 
-  // TODO: ligar numa API real de movimentações. Por enquanto fica
-  // como placeholder pra tela não quebrar antes do endpoint existir.
+  // Histórico de entradas e saídas (vem de GET /movimentacoes, já do mais
+  // novo pro mais antigo). Alimenta o card "Movimentações" (total) e o
+  // painel "Últimas movimentações" (as mais recentes).
   const [movimentacoes, setMovimentacoes] = useState([]);
-  const [loadingMovimentacoes, setLoadingMovimentacoes] = useState(false);
+  const [loadingMovimentacoes, setLoadingMovimentacoes] = useState(true);
+  const [movimentacoesError, setMovimentacoesError] = useState("");
 
   useEffect(() => {
     async function verifySession() {
@@ -87,13 +92,34 @@ export default function tela_inicial() {
     }
   }, []);
 
-  useEffect(() => {
-    if (session?.token) {
-      loadResumo(session.token);
-      loadMaterials(session.token);
-      // TODO: loadMovimentacoes(session.token) quando o endpoint existir.
+  const loadMovimentacoes = useCallback(async (token) => {
+    setLoadingMovimentacoes(true);
+    setMovimentacoesError("");
+    try {
+      const response = await listMovimentacoes(token);
+      setMovimentacoes(response.movimentacoes || []);
+    } catch (error) {
+      console.error("Erro ao carregar movimentações:", error);
+      setMovimentacoesError(
+        error?.message || "Não foi possível carregar as movimentações."
+      );
+    } finally {
+      setLoadingMovimentacoes(false);
     }
-  }, [session, loadResumo, loadMaterials]);
+  }, []);
+
+  // Carrega os dados quando a sessão fica pronta e TAMBÉM toda vez que a
+  // pessoa volta pra esta tela (ex: retirou um item no Estoque e voltou):
+  // sem isso, os números ficariam parados no que foi buscado na 1ª vez.
+  useFocusEffect(
+    useCallback(() => {
+      if (session?.token) {
+        loadResumo(session.token);
+        loadMaterials(session.token);
+        loadMovimentacoes(session.token);
+      }
+    }, [session, loadResumo, loadMaterials, loadMovimentacoes])
+  );
 
   if (checkingSession) {
     return null;
@@ -120,21 +146,21 @@ export default function tela_inicial() {
   const statCards = [
     {
       key: "produtos",
-      icon: "📦",
+      icon: "package",
       label: "Itens em estoque",
       value: loadingMaterials ? null : totalCadastrados,
       variant: "default",
     },
     {
       key: "materiais",
-      icon: "💉",
+      icon: "layers",
       label: "Materiais cadastrados",
       value: loadingMaterials ? null : tiposCadastrados,
       variant: "default",
     },
     {
       key: "vencidos",
-      icon: "⚠️",
+      icon: "alert-triangle",
       label: "Produtos vencidos",
       value: loadingMaterials ? null : vencidosCount,
       variant: "danger",
@@ -142,12 +168,16 @@ export default function tela_inicial() {
     },
     {
       key: "movimentacoes",
-      icon: "🔁",
+      icon: "repeat",
       label: "Movimentações",
-      value: loadingMovimentacoes ? null : movimentacoes.length,
+      // se a busca falhar, mostra "—" em vez de um 0 que pareceria real
+      value: loadingMovimentacoes ? null : movimentacoesError ? "—" : movimentacoes.length,
       variant: "default",
+      onPress: () => router.push("/movimentacoes"),
     },
   ];
+
+  const ultimasMovimentacoes = movimentacoes.slice(0, MAX_ULTIMAS_MOVIMENTACOES);
 
   return (
     <AppBar>
@@ -158,7 +188,7 @@ export default function tela_inicial() {
           {/* Saudação */}
           <View style={styles.greetingRow}>
             <View>
-              <Text style={styles.greetingTitle}>Olá! 👋</Text>
+              <Text style={styles.greetingTitle}>Olá!</Text>
               <Text style={styles.greetingSubtitle}>
                 Bem-vindo ao Sistema de Estoque do Curso de Enfermagem.
               </Text>
@@ -215,7 +245,11 @@ export default function tela_inicial() {
                       card.variant === "danger" && styles.statIconCircleDanger,
                     ]}
                   >
-                    <Text style={styles.statIcon}>{card.icon}</Text>
+                    <Icon
+                      name={card.icon}
+                      size={22}
+                      color={card.variant === "danger" ? "#c62828" : "#1B4A3B"}
+                    />
                   </View>
                   <View style={styles.statTextArea}>
                     <Text style={styles.statLabel}>{card.label}</Text>
@@ -270,19 +304,25 @@ export default function tela_inicial() {
             <View style={styles.movPanel}>
               <View style={styles.panelHeaderRow}>
                 <Text style={styles.panelTitle}>Últimas movimentações</Text>
-                <TouchableOpacity onPress={() => router.push("/movimentacoes")}>
-                  <Text style={styles.verTodasText}>Ver todas →</Text>
+                <TouchableOpacity
+                  style={styles.verTodasRow}
+                  onPress={() => router.push("/movimentacoes")}
+                >
+                  <Text style={styles.verTodasText}>Ver todas</Text>
+                  <Icon name="arrow-right" size={14} color="#1B4A3B" />
                 </TouchableOpacity>
               </View>
 
               {loadingMovimentacoes ? (
                 <ActivityIndicator style={{ marginTop: 24 }} />
-              ) : movimentacoes.length === 0 ? (
+              ) : movimentacoesError ? (
+                <Text style={styles.errorText}>{movimentacoesError}</Text>
+              ) : ultimasMovimentacoes.length === 0 ? (
                 <Text style={styles.emptyMovText}>
                   Nenhuma movimentação registrada ainda.
                 </Text>
               ) : (
-                movimentacoes.map((mov) => (
+                ultimasMovimentacoes.map((mov) => (
                   <View key={mov.id} style={styles.movRow}>
                     <View
                       style={[
@@ -290,19 +330,25 @@ export default function tela_inicial() {
                         mov.tipo === "entrada" ? styles.movIconEntrada : styles.movIconSaida,
                       ]}
                     >
-                      <Text style={styles.movIconText}>
-                        {mov.tipo === "entrada" ? "↑" : "↓"}
-                      </Text>
+                      <Icon
+                        name={mov.tipo === "entrada" ? "arrow-up" : "arrow-down"}
+                        size={16}
+                        color={mov.tipo === "entrada" ? "#1B4A3B" : "#c62828"}
+                      />
                     </View>
                     <View style={styles.movInfo}>
-                      <Text style={styles.movNome}>{mov.nome}</Text>
+                      <Text style={styles.movNome} numberOfLines={1}>
+                        {mov.materialNome}
+                      </Text>
                       <Text
                         style={[
                           styles.movTipo,
                           mov.tipo === "entrada" ? styles.movTipoEntrada : styles.movTipoSaida,
                         ]}
+                        numberOfLines={1}
                       >
                         {mov.tipo === "entrada" ? "Entrada" : "Saída"}
+                        {mov.responsavel ? ` · ${mov.responsavel}` : ""}
                       </Text>
                     </View>
                     <View style={styles.movRight}>
@@ -312,7 +358,7 @@ export default function tela_inicial() {
                           mov.tipo === "entrada" ? styles.movTipoEntrada : styles.movTipoSaida,
                         ]}
                       >
-                        {mov.tipo === "entrada" ? "+" : "-"} {mov.quantidade} un.
+                        {mov.tipo === "entrada" ? "+" : "-"} {mov.quantidade}
                       </Text>
                       <Text style={styles.movData}>{mov.data}</Text>
                     </View>
@@ -455,10 +501,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#f1bdb6",
   },
 
-  statIcon: {
-    fontSize: 18,
-  },
-
   statTextArea: {
     flex: 1,
   },
@@ -513,6 +555,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#5f6368",
     marginTop: 2,
+  },
+
+  verTodasRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
 
   verTodasText: {
@@ -592,14 +640,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#f7dedb",
   },
 
-  movIconText: {
-    fontSize: 13,
-    fontWeight: "bold",
-    color: "#1a1a1a",
-  },
-
   movInfo: {
     flex: 1,
+    minWidth: 0,
   },
 
   movNome: {
@@ -622,11 +665,15 @@ const styles = StyleSheet.create({
 
   movRight: {
     alignItems: "flex-end",
+    flexShrink: 0,
+    maxWidth: "50%",
   },
 
+  // a quantidade já vem pronta do backend ("2 caixas (100 un.)" / "5 un.")
   movQuantidade: {
     fontSize: 12,
     fontWeight: "600",
+    textAlign: "right",
   },
 
   movData: {

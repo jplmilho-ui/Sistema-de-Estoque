@@ -63,6 +63,12 @@ model Material {
   fatorConversao  Int       @default(1)
   quantidade      Int       @default(0)
   quantidadeTotal Int       @default(0)
+
+  // Estoque mínimo, na mesma unidade de "quantidade" (ex: caixas).
+  // Quando quantidade <= estoqueMinimo, a tela de Estoque destaca o item
+  // como "Estoque baixo". 0 = sem alerta (padrão, e o valor de todos os
+  // materiais que já existiam antes deste campo).
+  estoqueMinimo   Int       @default(0)
   validade        DateTime? @db.Date
   ca              String?
   ativo           Boolean   @default(true)

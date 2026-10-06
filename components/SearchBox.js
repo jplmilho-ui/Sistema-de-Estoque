@@ -1,10 +1,13 @@
 //Caixa de busca que pode ser reutilizada apenas.
-import { View, TextInput, Text, StyleSheet } from "react-native";
+import { View, TextInput, StyleSheet } from "react-native";
+import Icon from "./Icon";
 export default function SearchBox({ value, onChangeText, placeholder }) {
   return (
 
     <View style={styles.searchBox}>
-      <Text style={styles.searchIcon}>🔍</Text>
+      <View style={styles.searchIcon}>
+        <Icon name="search" size={16} color="#80868b" />
+      </View>
       <TextInput
         style={styles.searchInput}
         placeholder={placeholder}
@@ -22,16 +25,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#acacac",
     borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    minWidth: 180,
-    maxWidth: 260,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    // A busca é uma das funções principais das telas: fica mais larga
+    // (240 px), mas ainda encolhe em telas bem estreitas.
+    width: 240,
+    minWidth: 160,
     flexShrink: 1,
   },
   searchIcon: {
-    fontSize: 13,
-    marginRight: 6,
-    opacity: 0.6,
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
@@ -39,7 +42,7 @@ const styles = StyleSheet.create({
     // container (o bug do texto vazando pra fora do balão arredondado).
     // Flex items na web têm min-width:auto por padrão — precisa zerar.
     minWidth: 0,
-    fontSize: 13,
+    fontSize: 14,
     padding: 0,
     outlineStyle: "none",
   },

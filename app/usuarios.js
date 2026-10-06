@@ -437,6 +437,7 @@ export default function Usuarios() {
 
       <PageHeader
         title="Usuários"
+        subtitle="Gerencie as contas de acesso ao sistema."
 
         actions={
           <>
