@@ -5,6 +5,7 @@ import {
 import { router } from "expo-router";
 
 import AppBar from "../components/AppBar";
+import TabelaRolavel from "../components/TabelaRolavel";
 import PageHeader from "../components/PageHeader";
 import SearchBox from "../components/SearchBox";
 
@@ -26,7 +27,15 @@ const FILTROS = [
   { key: "todas", label: "Todas" },
   { key: "entrada", label: "Entradas" },
   { key: "saida", label: "Saídas" },
+  { key: "devolucao", label: "Devoluções" },
 ];
+
+// Rótulo e estilo do selo de cada tipo de movimentação.
+const TIPOS = {
+  entrada: { label: "Entrada", estilo: "tipoBadgeEntrada" },
+  saida: { label: "Saída", estilo: "tipoBadgeSaida" },
+  devolucao: { label: "Devolução", estilo: "tipoBadgeDevolucao" },
+};
 
 // Atalhos de período no modal "Gerar PDF". `dias` conta o dia de hoje
 // (7 = hoje + os 6 dias anteriores); null limpa as datas (todo o período).
@@ -142,7 +151,9 @@ export default function Movimentacoes() {
       ? "somente entradas"
       : filtro === "saida"
         ? "somente saídas"
-        : "todas as movimentações";
+        : filtro === "devolucao"
+          ? "somente devoluções"
+          : "todas as movimentações";
   const descricaoFiltros = buscaAtual
     ? `${descricaoTipo}, busca "${buscaAtual}"`
     : descricaoTipo;
@@ -220,7 +231,7 @@ export default function Movimentacoes() {
     <AppBar>
       <PageHeader
         title="Movimentações"
-        subtitle="Acompanhe as entradas e saídas de materiais do estoque."
+        subtitle="Acompanhe as entradas, saídas e devoluções de materiais do estoque."
         actions={
           <>
             <TouchableOpacity
@@ -268,6 +279,7 @@ export default function Movimentacoes() {
           style={styles.listWrapper}
           contentContainerStyle={{ paddingBottom: 30 }}
         >
+          <TabelaRolavel larguraMinima={720}>
           <View style={styles.listCard}>
             {/* Cabeçalho da tabela */}
             <View style={[styles.row, styles.rowHeader]}>
@@ -336,12 +348,10 @@ export default function Movimentacoes() {
                     <Text
                       style={[
                         styles.tipoBadge,
-                        item.tipo === "entrada"
-                          ? styles.tipoBadgeEntrada
-                          : styles.tipoBadgeSaida,
+                        styles[(TIPOS[item.tipo] || TIPOS.saida).estilo],
                       ]}
                     >
-                      {item.tipo === "entrada" ? "Entrada" : "Saída"}
+                      {(TIPOS[item.tipo] || TIPOS.saida).label}
                     </Text>
                   </View>
 
@@ -361,6 +371,7 @@ export default function Movimentacoes() {
                 </View>
               ))}
           </View>
+          </TabelaRolavel>
         </ScrollView>
       </View>
 
@@ -510,7 +521,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e6f4ea",
   },
   filterOptionText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
   },
   filterOptionTextActive: {
@@ -539,13 +550,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
   },
   headerText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: "#5f6368",
     textTransform: "uppercase",
   },
   cell: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#202124",
   },
   cellData: {
@@ -567,7 +578,7 @@ const styles = StyleSheet.create({
     color: "#5f6368",
   },
   tipoBadge: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -583,17 +594,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#fdeee6",
     color: "#c86756",
   },
+  tipoBadgeDevolucao: {
+    backgroundColor: "#e8f0fe",
+    color: "#1a56c4",
+  },
   centerBox: {
     paddingVertical: 24,
     alignItems: "center",
   },
   emptyText: {
     color: "#5f6368",
-    fontSize: 14,
+    fontSize: 16,
   },
   errorText: {
     color: "#c62828",
-    fontSize: 13,
+    fontSize: 15,
   },
 
   // Botão "Gerar PDF" (mesmo visual do "Gerar relatório" do Estoque)
@@ -608,7 +623,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   pdfButtonText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#ed0000",
     fontWeight: "600",
   },
@@ -632,13 +647,13 @@ const styles = StyleSheet.create({
     maxWidth: 400,
   },
   formTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
     color: "#202124",
     marginBottom: 8,
   },
   modalIntro: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
     marginBottom: 14,
   },
@@ -657,7 +672,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   atalhoOptionText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#5f6368",
   },
   datasRow: {
@@ -669,7 +684,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dataLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#5f6368",
     marginBottom: 4,
   },
@@ -679,29 +694,29 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: 16,
     color: "#202124",
     backgroundColor: "#ffffff",
   },
   filtrosInfo: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#5f6368",
     marginBottom: 10,
   },
   resumoOk: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "600",
     color: "#1b4a3b",
     marginBottom: 10,
   },
   resumoVazio: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
     marginBottom: 10,
   },
   modalErrorText: {
     color: "#c62828",
-    fontSize: 13,
+    fontSize: 15,
     marginBottom: 10,
   },
   modalActions: {
@@ -718,7 +733,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   actionButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#1a1a1a",
   },
   modalCancelButton: {
@@ -735,7 +750,7 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     color: "#ffffff",
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "500",
   },
 });

@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
     // container (o bug do texto vazando pra fora do balão arredondado).
     // Flex items na web têm min-width:auto por padrão — precisa zerar.
     minWidth: 0,
-    fontSize: 14,
+    fontSize: 16,
     padding: 0,
     outlineStyle: "none",
   },

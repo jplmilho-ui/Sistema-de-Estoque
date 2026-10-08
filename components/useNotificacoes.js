@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { carregarNotificacoes, getLidas, saveLidas } from "../services/notificacoes";
 import { aprovarSolicitacao, recusarSolicitacao } from "../services/solicitacoesApi";
+import { aprovarEmprestimo, recusarEmprestimo } from "../services/emprestimosApi";
 
 const INTERVALO_ATUALIZACAO_MS = 30 * 1000;
 
@@ -103,14 +104,22 @@ export default function useNotificacoes({ token, userId, role }) {
   // Em caso de erro (ex: estoque insuficiente), a mensagem fica no item.
   const responderSolicitacao = useCallback(
     async (item, acao, motivo) => {
-      if (!token || !item.solicitacaoId) return false;
+      // item pode ser uma solicitação de EPI ou um pedido de empréstimo de
+      // uniforme: os dois são respondidos do mesmo jeito (aprovar/recusar).
+      if (!token || !(item.solicitacaoId || item.emprestimoId)) return false;
 
       setRespondendoId(item.id);
       setErrosAcao((atual) => ({ ...atual, [item.id]: "" }));
 
       let sucesso = false;
       try {
-        if (acao === "aprovar") {
+        if (item.emprestimoId) {
+          if (acao === "aprovar") {
+            await aprovarEmprestimo(token, item.emprestimoId);
+          } else {
+            await recusarEmprestimo(token, item.emprestimoId, motivo);
+          }
+        } else if (acao === "aprovar") {
           await aprovarSolicitacao(token, item.solicitacaoId);
         } else {
           await recusarSolicitacao(token, item.solicitacaoId, motivo);

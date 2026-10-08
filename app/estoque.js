@@ -26,6 +26,10 @@ import { getSession } from "../services/authStorage";
 import { listMaterials, retirarMaterial, devolverMaterial } from "../services/materialApi";
 import { isVencido } from "../utils/validade";
 import { isEstoqueBaixo, textoEstoqueBaixo } from "../utils/estoque";
+import TabelaRolavel from "../components/TabelaRolavel";
+import EmprestimosEquipe from "../components/EmprestimosEquipe";
+import { gerarPdfRetirada, textoQuantidade } from "../utils/retiradaPdf";
+import { baixarPdf } from "../utils/pdfBase";
 
 // Papéis que podem ver e movimentar o Estoque. Diferente da tela de
 // Materiais (administrativa), aqui admin, coordenador e professor podem
@@ -88,11 +92,19 @@ export default function Estoque() {
   const params = useLocalSearchParams();
   const [mostrarSoVencidos, setMostrarSoVencidos] = useState(false);
 
+  // Abas da tela: "materiais" (tabela do estoque) ou "emprestimos"
+  // (uniformes emprestados aos alunos). O aviso de "uniforme não devolvido"
+  // do sino abre direto a aba de empréstimos (/estoque?aba=emprestimos).
+  const [aba, setAba] = useState("materiais");
+
   useEffect(() => {
     if (params.filtro === "vencidos") {
       setMostrarSoVencidos(true);
     }
-  }, [params.filtro]);
+    if (params.aba === "emprestimos") {
+      setAba("emprestimos");
+    }
+  }, [params.filtro, params.aba]);
 
   // ---------------------------------------------------------
   // CONTROLE DE ACESSO
@@ -127,6 +139,12 @@ export default function Estoque() {
   const [movementQuantidade, setMovementQuantidade] = useState("");
   const [movementError, setMovementError] = useState("");
   const [movementSaving, setMovementSaving] = useState(false);
+
+  // TERMO DE RETIRADA (PDF pra assinar): guarda o que foi retirado nesta
+  // sessão e ainda não entrou em um termo. `retiradaFeita` abre o aviso
+  // logo após cada retirada, com o botão de gerar o PDF.
+  const [retiradasTermo, setRetiradasTermo] = useState([]);
+  const [retiradaFeita, setRetiradaFeita] = useState(null);
 
   // VERIFICAÇÃO DE ACESSO
 
@@ -483,6 +501,18 @@ export default function Estoque() {
         )
       );
 
+      if (movement.tipo === "retirar") {
+        const itemRetirado = {
+          nome: selectedMaterial.nome,
+          categoria: selectedMaterial.categoria,
+          ca: selectedMaterial.ca,
+          quantidadeTexto: textoQuantidade(quantidade, selectedMaterial),
+          quando: new Date(),
+        };
+        setRetiradasTermo((atual) => [...atual, itemRetirado]);
+        setRetiradaFeita(itemRetirado);
+      }
+
       setMovement(null);
     } catch (error) {
       setMovementError(
@@ -503,6 +533,42 @@ export default function Estoque() {
     }
   }
 
+  // GERAR TERMO DE RETIRADA (.pdf)
+  //
+  // PDF pra imprimir com TODOS os itens retirados desde o último termo.
+  // O nome de quem retira sai preenchido com o da conta logada; há campo
+  // de assinatura para essa pessoa e para a coordenação.
+  function handleGerarTermo() {
+    if (retiradasTermo.length === 0) {
+      Alert.alert("Nada para o termo", "Retire um item do estoque primeiro.");
+      return;
+    }
+
+    if (Platform.OS !== "web") {
+      Alert.alert(
+        "Disponível só na versão web",
+        "Por enquanto, gerar o termo em PDF só funciona rodando o app pelo navegador."
+      );
+      return;
+    }
+
+    try {
+      const { doc, nomeArquivo } = gerarPdfRetirada({
+        itens: retiradasTermo,
+        retirante: {
+          nome: session?.user?.name || "",
+          role: session?.user?.role,
+        },
+      });
+      baixarPdf(doc, nomeArquivo);
+      setRetiradasTermo([]);
+      setRetiradaFeita(null);
+    } catch (error) {
+      console.error("Erro ao gerar termo de retirada:", error);
+      Alert.alert("Erro", "Não foi possível gerar o termo em PDF.");
+    }
+  }
+
   if (checkingAccess) {
     return null;
   }
@@ -513,6 +579,7 @@ export default function Estoque() {
         title="Estoque"
         subtitle="Gerencie os materiais disponíveis no laboratório."
         actions={
+          aba !== "materiais" ? null : (
           <>
             <TouchableOpacity
               style={styles.reportButton}
@@ -520,6 +587,14 @@ export default function Estoque() {
             >
               <Text style={styles.reportButtonText}>Gerar relatório</Text>
             </TouchableOpacity>
+
+            {retiradasTermo.length > 0 && (
+              <TouchableOpacity style={styles.termoButton} onPress={handleGerarTermo}>
+                <Text style={styles.termoButtonText}>
+                  Termo de retirada ({retiradasTermo.length})
+                </Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.retirarButton}
@@ -541,8 +616,33 @@ export default function Estoque() {
               placeholder="Buscar material..."
             />
           </>
+          )
         }
       />
+
+      {/* Abas: materiais x empréstimos de uniforme */}
+      <View style={styles.abaRow}>
+        {[
+          { key: "materiais", label: "Materiais" },
+          { key: "emprestimos", label: "Empréstimos de uniforme" },
+        ].map((opcao) => {
+          const ativa = aba === opcao.key;
+          return (
+            <TouchableOpacity
+              key={opcao.key}
+              style={[styles.abaButton, ativa && styles.abaButtonActive]}
+              onPress={() => setAba(opcao.key)}
+            >
+              <Text style={[styles.abaText, ativa && styles.abaTextActive]}>{opcao.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {aba === "emprestimos" ? (
+        <EmprestimosEquipe session={session} />
+      ) : (
+        <>
 
       {/* Filtro por categoria */}
       <View style={styles.categoriaRow}>
@@ -585,6 +685,7 @@ export default function Estoque() {
       )}
 
       <ScrollView style={styles.Space} contentContainerStyle={{ paddingBottom: 30 }}>
+        <TabelaRolavel larguraMinima={700}>
         <View style={styles.table}>
           {/* Cabeçalho da tabela (fundo cinza, texto em maiúsculas) */}
           <View style={styles.headerRow}>
@@ -690,7 +791,10 @@ export default function Estoque() {
               );
             })}
         </View>
+        </TabelaRolavel>
       </ScrollView>
+        </>
+      )}
 
       {/* MODAL DE ADICIONAR / RETIRAR QUANTIDADE */}
       <Modal
@@ -760,6 +864,42 @@ export default function Estoque() {
           </View>
         </View>
       </Modal>
+      {/* AVISO APÓS RETIRAR: oferece o termo em PDF para assinar */}
+      <Modal
+        visible={!!retiradaFeita}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRetiradaFeita(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.formTitle}>Retirada registrada</Text>
+            <Text style={styles.modalMaterialNome}>
+              {retiradaFeita?.quantidadeTexto} de {retiradaFeita?.nome}
+            </Text>
+            <Text style={styles.helperText}>
+              Gere o termo em PDF para imprimir e assinar. Ele inclui{" "}
+              {retiradasTermo.length === 1
+                ? "este item"
+                : `os ${retiradasTermo.length} itens retirados`}
+              , o seu nome e o campo de assinatura da coordenação.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.modalCancelButton]}
+                onPress={() => setRetiradaFeita(null)}
+              >
+                <Text style={styles.actionButtonText}>Agora não</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.saveButton} onPress={handleGerarTermo}>
+                <Text style={styles.saveButtonText}>Gerar termo (PDF)</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </AppBar>
   );
 }
@@ -775,8 +915,51 @@ const styles = StyleSheet.create({
     backgroundColor: "#1B4A3B",
   },
   addButtonText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#ffffff",
+    fontWeight: "600",
+  },
+  // abas Materiais / Empréstimos
+  abaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  abaButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 44,
+    justifyContent: "center",
+    borderBottomWidth: 3,
+    borderBottomColor: "transparent",
+  },
+  abaButtonActive: {
+    borderBottomColor: "#1B4A3B",
+  },
+  abaText: {
+    fontSize: 16,
+    color: "#5f6368",
+  },
+  abaTextActive: {
+    color: "#1B4A3B",
+    fontWeight: "700",
+  },
+
+  // "Termo de retirada (N)": aparece depois de retirar itens
+  termoButton: {
+    borderWidth: 1,
+    borderColor: "#1B4A3B",
+    borderRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: "#e3efe9",
+  },
+  termoButtonText: {
+    fontSize: 15,
+    color: "#1B4A3B",
     fontWeight: "600",
   },
   // "Retirar item": fundo branco com borda cinza escura (#495057) — o
@@ -790,7 +973,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   retirarButtonText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#495057",
     fontWeight: "600",
   },
@@ -804,7 +987,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   reportButtonText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#ed0000",
     fontWeight: "600",
   },
@@ -818,7 +1001,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   categoriaLabel: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
     marginRight: 4,
   },
@@ -839,7 +1022,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1B4A3B",
   },
   categoriaChipText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
   },
   categoriaChipTextActive: {
@@ -848,9 +1031,9 @@ const styles = StyleSheet.create({
   },
   // contador de itens dentro do chip ("Todas 4")
   categoriaCount: {
-    minWidth: 22,
-    height: 20,
-    borderRadius: 10,
+    minWidth: 26,
+    minHeight: 24,
+    borderRadius: 12,
     paddingHorizontal: 6,
     backgroundColor: "#eeeeee",
     alignItems: "center",
@@ -860,7 +1043,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.22)",
   },
   categoriaCountText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: "#5f6368",
   },
@@ -885,11 +1068,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   filtroChipText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#c62828",
   },
   filtroChipClose: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#c62828",
     fontWeight: "600",
     textDecorationLine: "underline",
@@ -945,7 +1128,7 @@ const styles = StyleSheet.create({
     borderColor: "#ffffff",
   },
   headerCell: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: "#5f6368",
     textTransform: "uppercase",
@@ -956,7 +1139,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e6e6e6",
   },
   cell: {
-    fontSize: 14,
+    fontSize: 16,
     color: "#1a1a1a",
   },
   // célula da quantidade quando há bolinha de "Estoque baixo" ao lado
@@ -966,7 +1149,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   cellInline: {
-    fontSize: 14,
+    fontSize: 16,
     color: "#1a1a1a",
     flexShrink: 1,
   },
@@ -977,12 +1160,12 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: "#5f6368",
-    fontSize: 14,
+    fontSize: 16,
     textAlign: "center",
   },
   errorText: {
     color: "#c62828",
-    fontSize: 13,
+    fontSize: 15,
     marginBottom: 12,
     textAlign: "center",
   },
@@ -1002,19 +1185,19 @@ const styles = StyleSheet.create({
     maxWidth: 360,
   },
   formTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
     color: "#202124",
     marginBottom: 16,
   },
   modalMaterialNome: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "600",
     color: "#202124",
     marginBottom: 4,
   },
   helperText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#1b4a3b",
     marginBottom: 12,
   },
@@ -1024,13 +1207,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: 17,
     color: "#202124",
     marginBottom: 10,
     backgroundColor: "#ffffff",
   },
   modalActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "flex-end",
     gap: 10,
     marginTop: 4,
@@ -1040,10 +1224,11 @@ const styles = StyleSheet.create({
     borderColor: "#c9c9c9",
     borderRadius: 4,
     paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingVertical: 10,
+    minHeight: 44,
   },
   actionButtonText: {
-    fontSize: 12,
+    fontSize: 16,
     color: "#1a1a1a",
   },
   modalCancelButton: {
@@ -1054,12 +1239,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#ed0000",
     borderRadius: 6,
     paddingVertical: 12,
+    paddingHorizontal: 16,
+    minHeight: 44,
     alignItems: "center",
     justifyContent: "center",
   },
   saveButtonText: {
     color: "#ffffff",
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "500",
   },
   buttonDisabled: {

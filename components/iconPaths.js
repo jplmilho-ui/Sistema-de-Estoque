@@ -92,4 +92,17 @@ export const ICONS = {
     line("15", "9", "9", "15"),
     line("9", "9", "15", "15"),
   ],
+
+  // ----- empréstimos / navegação -----
+  "shopping-bag": [
+    path("M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"),
+    line(3, 6, 21, 6),
+    path("M16 10a4 4 0 0 1-8 0"),
+  ],
+  menu: [line(3, 12, 21, 12), line(3, 6, 21, 6), line(3, 18, 21, 18)],
+  download: [
+    path("M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"),
+    polyline("7 10 12 15 17 10"),
+    line(12, 15, 12, 3),
+  ],
 };

@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.25)",
   },
   tooltipText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#ffffff",
   },
 });

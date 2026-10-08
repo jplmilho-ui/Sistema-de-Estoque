@@ -13,8 +13,22 @@
 // funcionam normal). Evitei "—", "•" e "…" de propósito: a fonte padrão do
 // PDF (Helvetica) não desenha esses símbolos de forma confiável.
 
-import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import {
+  criarDocumento,
+  medidas,
+  desenharCabecalho,
+  desenharTitulo,
+  desenharCampos,
+  desenharRodape,
+  estiloTabela,
+} from "./pdfBase";
+import { formatarDataBR, mascararData } from "./datas";
+
+// A tela de Movimentações importa estas funções daqui; elas agora moram em
+// utils/datas.js e utils/pdfBase.js (compartilhadas com os outros PDFs).
+export { formatarDataBR, mascararData };
+export { baixarPdf } from "./pdfBase";
 
 // ---------------------------------------------------------------------
 // Datas
@@ -34,23 +48,6 @@ export function chaveParaBR(chave) {
   const mes = Math.floor((chave % 10000) / 100);
   const dia = chave % 100;
   return `${String(dia).padStart(2, "0")}/${String(mes).padStart(2, "0")}/${ano}`;
-}
-
-// Devolve "DD/MM/AAAA" a partir de um Date.
-export function formatarDataBR(data) {
-  const dia = String(data.getDate()).padStart(2, "0");
-  const mes = String(data.getMonth() + 1).padStart(2, "0");
-  return `${dia}/${mes}/${data.getFullYear()}`;
-}
-
-// Máscara pro campo de data: o usuário digita só os números e a barra é
-// colocada sozinha. "10092026" -> "10/09/2026".
-export function mascararData(texto) {
-  const numeros = String(texto ?? "").replace(/\D/g, "").slice(0, 8);
-
-  if (numeros.length <= 2) return numeros;
-  if (numeros.length <= 4) return `${numeros.slice(0, 2)}/${numeros.slice(2)}`;
-  return `${numeros.slice(0, 2)}/${numeros.slice(2, 4)}/${numeros.slice(4)}`;
 }
 
 // Lê "DD/MM/AAAA" com validação de calendário de verdade: 31/02/2026
@@ -170,21 +167,11 @@ function montarNomeArquivo(inicio, fim, geradoEm) {
 
 // ---------------------------------------------------------------------
 // PDF
+//
+// Visual minimalista e sem cores (é pra imprimir): cabeçalho institucional,
+// título centralizado, dados do relatório e a tabela com as mesmas colunas
+// que aparecem na tela. O relatório não tem campo de assinatura.
 // ---------------------------------------------------------------------
-
-// Cores iguais às da tela (app/movimentacoes.js), em [R, G, B].
-const COR = {
-  verdeEscuro: [27, 74, 59], // #1b4a3b
-  textoPrincipal: [32, 33, 36], // #202124
-  textoSuave: [95, 99, 104], // #5f6368
-  fundoCabecalho: [245, 245, 245], // #f5f5f5
-  linha: [238, 238, 238], // #eeeeee
-  divisor: [204, 204, 204], // #cccccc
-  entradaFundo: [230, 244, 234], // #e6f4ea
-  entradaTexto: [27, 74, 59], // #1b4a3b
-  saidaFundo: [253, 238, 230], // #fdeee6
-  saidaTexto: [200, 103, 86], // #c86756
-};
 
 // Mesma ordem e mesma proporção (flex) das colunas da tela.
 const COLUNAS = [
@@ -194,9 +181,13 @@ const COLUNAS = [
   { titulo: "Quantidade", flex: 1.4 },
   { titulo: "Responsável", flex: 1.5 },
 ];
-const COLUNA_TIPO = 2;
 
-const MARGEM = { top: 14, right: 14, bottom: 18, left: 14 };
+// Nome do tipo de movimentação como aparece na tela e no PDF.
+function rotuloTipo(tipo) {
+  if (tipo === "entrada") return "Entrada";
+  if (tipo === "devolucao") return "Devolução";
+  return "Saída";
+}
 
 // Corta textos muito grandes (ex: busca longa) pra não vazar da página.
 function limitar(texto, max) {
@@ -209,7 +200,7 @@ function limitar(texto, max) {
 // opcoes:
 //   movimentacoes  lista já filtrada, na mesma ordem da tela
 //   inicio, fim    período em AAAAMMDD (ou null = sem limite)
-//   tipo           "todas" | "entrada" | "saida" (filtro da tela)
+//   tipo           "todas" | "entrada" | "saida" | "devolucao" (filtro da tela)
 //   busca          texto da busca da tela ("" se vazio)
 //   geradoEm       Date (padrão: agora)
 export function gerarPdfMovimentacoes({
@@ -220,203 +211,63 @@ export function gerarPdfMovimentacoes({
   busca = "",
   geradoEm = new Date(),
 }) {
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: "a4",
-    compress: true,
-  });
-
-  const larguraPagina = doc.internal.pageSize.getWidth();
-  const alturaPagina = doc.internal.pageSize.getHeight();
-  const larguraUtil = larguraPagina - MARGEM.left - MARGEM.right;
-  const direita = larguraPagina - MARGEM.right;
+  const doc = criarDocumento("Relatório de Movimentações");
+  const { util } = medidas(doc);
 
   const totalEntradas = movimentacoes.filter((m) => m.tipo === "entrada").length;
-  const totalSaidas = movimentacoes.length - totalEntradas;
+  const totalSaidas = movimentacoes.filter((m) => m.tipo === "saida").length;
+  const totalDevolucoes = movimentacoes.filter((m) => m.tipo === "devolucao").length;
 
-  const horaFormatada = geradoEm.toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  let y = desenharCabecalho(doc);
+  y = desenharTitulo(doc, "Relatório de Movimentações", y + 4);
 
-  doc.setProperties({
-    title: "Relatório de Movimentações",
-    author: "Sistema de Estoque",
-    creator: "Sistema de Estoque",
-  });
-
-  // ----- Cabeçalho da primeira página -----
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...COR.textoSuave);
-  doc.text("Sistema de Estoque", MARGEM.left, 16);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.setTextColor(...COR.verdeEscuro);
-  doc.text("Relatório de Movimentações", MARGEM.left, 24);
-
-  // Resumo alinhado à direita, na altura do título
-  const totalTexto = `${movimentacoes.length} ${
-    movimentacoes.length === 1 ? "movimentação" : "movimentações"
-  }`;
-  doc.setFontSize(11);
-  doc.setTextColor(...COR.textoPrincipal);
-  doc.text(totalTexto, direita, 20, { align: "right" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...COR.textoSuave);
-  doc.text(
-    `${totalEntradas} ${totalEntradas === 1 ? "entrada" : "entradas"}, ${totalSaidas} ${
-      totalSaidas === 1 ? "saída" : "saídas"
-    }`,
-    direita,
-    25,
-    { align: "right" }
-  );
-
-  // Divisor (igual à linha cinza abaixo do título nas telas do app)
-  doc.setDrawColor(...COR.divisor);
-  doc.setLineWidth(0.3);
-  doc.line(MARGEM.left, 28, direita, 28);
-
-  // Linhas de informação: rótulo em negrito + valor
   const tipoTexto =
-    tipo === "entrada" ? "Entradas" : tipo === "saida" ? "Saídas" : "Todas";
+    tipo === "entrada"
+      ? "Entradas"
+      : tipo === "saida"
+        ? "Saídas"
+        : tipo === "devolucao"
+          ? "Devoluções"
+          : "Todas";
 
-  const infos = [
-    ["Período:", descreverPeriodo(inicio, fim)],
-    ["Tipo:", tipoTexto],
+  const campos = [
+    ["Período", descreverPeriodo(inicio, fim)],
+    ["Tipo", tipoTexto],
   ];
-  if (busca) infos.push(["Busca:", limitar(busca, 70)]);
-  infos.push([
-    "Gerado em:",
-    `${formatarDataBR(geradoEm)} às ${horaFormatada}`,
+  if (busca) campos.push(["Busca", limitar(busca, 70)]);
+  campos.push([
+    "Total",
+    `${movimentacoes.length} ${
+      movimentacoes.length === 1 ? "movimentação" : "movimentações"
+    } (${totalEntradas} ${totalEntradas === 1 ? "entrada" : "entradas"}, ${totalSaidas} ${
+      totalSaidas === 1 ? "saída" : "saídas"
+    }, ${totalDevolucoes} ${totalDevolucoes === 1 ? "devolução" : "devoluções"})`,
   ]);
 
-  let y = 35;
-  infos.forEach(([rotulo, valor]) => {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(...COR.textoSuave);
-    doc.text(rotulo, MARGEM.left, y);
-
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...COR.textoPrincipal);
-    doc.text(valor, MARGEM.left + 22, y);
-    y += 5;
-  });
+  y = desenharCampos(doc, campos, y + 2, { colunaRotulo: 24 });
 
   // ----- Tabela (mesmas colunas da tela) -----
   const somaFlex = COLUNAS.reduce((soma, col) => soma + col.flex, 0);
   const columnStyles = {};
   COLUNAS.forEach((col, index) => {
-    columnStyles[index] = { cellWidth: (larguraUtil * col.flex) / somaFlex };
+    columnStyles[index] = { cellWidth: (util * col.flex) / somaFlex };
   });
-  // Na tela, "Data" e "Responsável" são em cinza mais claro
-  columnStyles[0].textColor = COR.textoSuave;
-  columnStyles[4].textColor = COR.textoSuave;
 
   autoTable(doc, {
-    startY: y + 3,
-    margin: MARGEM,
-    theme: "plain",
-    // O cabeçalho da tela é em maiúsculas
-    head: [COLUNAS.map((col) => col.titulo.toUpperCase())],
+    ...estiloTabela(),
+    startY: y + 4,
+    head: [COLUNAS.map((col) => col.titulo)],
     body: movimentacoes.map((item) => [
       item.data ?? "",
       item.materialNome ?? "",
-      item.tipo === "entrada" ? "Entrada" : "Saída", // desenhado como selo abaixo
+      rotuloTipo(item.tipo),
       item.quantidade ?? "",
       item.responsavel ?? "",
     ]),
     columnStyles,
-    styles: {
-      font: "helvetica",
-      fontSize: 9,
-      textColor: COR.textoPrincipal,
-      cellPadding: { top: 3, right: 2.5, bottom: 3, left: 2.5 },
-      valign: "middle",
-      overflow: "linebreak",
-      lineColor: COR.linha,
-      lineWidth: { bottom: 0.2 },
-    },
-    headStyles: {
-      fillColor: COR.fundoCabecalho,
-      textColor: COR.textoSuave,
-      fontStyle: "bold",
-      fontSize: 7.5,
-    },
-    // Uma linha nunca é cortada no meio entre duas páginas
-    rowPageBreak: "avoid",
-    showHead: "everyPage",
-
-    // A coluna "Tipo" é desenhada como o selo colorido da tela, então o
-    // texto simples da célula é escondido aqui e o selo sai no didDrawCell.
-    didParseCell: (data) => {
-      if (data.section === "body" && data.column.index === COLUNA_TIPO) {
-        data.cell.text = [];
-      }
-    },
-    didDrawCell: (data) => {
-      if (data.section !== "body" || data.column.index !== COLUNA_TIPO) return;
-
-      const item = movimentacoes[data.row.index];
-      const entrada = item?.tipo === "entrada";
-      const rotulo = entrada ? "Entrada" : "Saída";
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-
-      const alturaSelo = 5.2;
-      const larguraSelo = doc.getTextWidth(rotulo) + 5.2;
-      const x = data.cell.x + 2.5;
-      const yTopo = data.cell.y + (data.cell.height - alturaSelo) / 2;
-
-      doc.setFillColor(...(entrada ? COR.entradaFundo : COR.saidaFundo));
-      doc.roundedRect(x, yTopo, larguraSelo, alturaSelo, alturaSelo / 2, alturaSelo / 2, "F");
-
-      doc.setTextColor(...(entrada ? COR.entradaTexto : COR.saidaTexto));
-      doc.text(rotulo, x + larguraSelo / 2, yTopo + alturaSelo / 2, {
-        align: "center",
-        baseline: "middle",
-      });
-    },
   });
 
-  // ----- Rodapé em todas as páginas ("Página X de Y") -----
-  const totalPaginas = doc.getNumberOfPages();
-  for (let pagina = 1; pagina <= totalPaginas; pagina++) {
-    doc.setPage(pagina);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(...COR.textoSuave);
-    doc.text(
-      "Sistema de Estoque - Relatório de Movimentações",
-      MARGEM.left,
-      alturaPagina - 8
-    );
-    doc.text(`Página ${pagina} de ${totalPaginas}`, direita, alturaPagina - 8, {
-      align: "right",
-    });
-  }
+  desenharRodape(doc, "Sistema de Estoque - Relatório de Movimentações", geradoEm);
 
   return { doc, nomeArquivo: montarNomeArquivo(inicio, fim, geradoEm) };
-}
-
-// Baixa o PDF no navegador (mesma técnica do relatório de Estoque:
-// cria um link temporário e clica nele). Só funciona na versão web.
-export function baixarPdf(doc, nomeArquivo) {
-  const blob = doc.output("blob");
-  const url = URL.createObjectURL(blob);
-
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = nomeArquivo;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 }

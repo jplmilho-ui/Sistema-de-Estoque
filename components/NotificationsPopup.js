@@ -31,15 +31,27 @@ const TIPOS = {
   "sem-estoque": { icon: "inbox", color: "#5f6368", bg: "#eeeeee" },
   entrada: { icon: "arrow-up", color: "#1b6b3a", bg: "#e6f4ea" },
   saida: { icon: "arrow-down", color: "#1a56c4", bg: "#e8f0fe" },
+  devolucao: { icon: "repeat", color: "#1a56c4", bg: "#e8f0fe" },
   solicitacao: { icon: "user", color: "#1a56c4", bg: "#e8f0fe" },
   aprovada: { icon: "check-circle", color: "#1b6b3a", bg: "#e6f4ea" },
   recusada: { icon: "x-circle", color: "#c62828", bg: "#fdeceb" },
+  // empréstimos de uniforme
+  "emprestimo-prazo": { icon: "clock", color: "#b26a00", bg: "#fff4e0" },
+  "emprestimo-atrasado": { icon: "alert-triangle", color: "#c62828", bg: "#fdeceb" },
 };
 
 // Ordem dos grupos = ordem de prioridade (solicitações primeiro).
+// Para o aluno, os prazos de devolução vêm antes (é o que ele não pode perder).
 function gruposPara(isAluno) {
+  if (isAluno) {
+    return [
+      { key: "emprestimos", label: "Devolução de uniforme" },
+      { key: "solicitacoes", label: "Minhas solicitações" },
+    ];
+  }
   return [
-    { key: "solicitacoes", label: isAluno ? "Minhas solicitações" : "Solicitações de alunos" },
+    { key: "solicitacoes", label: "Solicitações de alunos" },
+    { key: "emprestimos", label: "Uniformes não devolvidos" },
     { key: "alertas", label: "Alertas" },
     { key: "movimentacoes", label: "Movimentações recentes" },
   ];
@@ -137,12 +149,13 @@ export default function NotificationsPopup({
   onRespond,
   respondendoId,
   errosAcao = {},
+  topOffset = TOP_OFFSET,
 }) {
   const { width, height } = useWindowDimensions();
   const [aba, setAba] = useState("todas");
 
   const cardWidth = Math.min(420, width - SIDE_MARGIN * 2);
-  const cardMaxHeight = Math.max(240, height - TOP_OFFSET - SIDE_MARGIN);
+  const cardMaxHeight = Math.max(240, height - topOffset - SIDE_MARGIN);
 
   const estaLida = (item) => item.lidaPorPadrao || lidas.has(item.id);
 
@@ -157,7 +170,7 @@ export default function NotificationsPopup({
       {/* clicar fora do cartão fecha o pop-up */}
       <Pressable style={styles.backdrop} onPress={onClose} />
 
-      <View style={[styles.card, { width: cardWidth, maxHeight: cardMaxHeight }]}>
+      <View style={[styles.card, { width: cardWidth, maxHeight: cardMaxHeight, top: topOffset }]}>
         {/* Cabeçalho */}
         <View style={styles.header}>
           <Text style={styles.title}>Notificações</Text>
@@ -227,8 +240,8 @@ export default function NotificationsPopup({
                 {aba === "naoLidas"
                   ? "Você não tem notificações não lidas."
                   : isAluno
-                  ? "Você será avisado aqui quando uma solicitação sua for aprovada."
-                  : "Quando houver solicitações de alunos, itens vencidos ou novas movimentações, elas aparecem aqui."}
+                  ? "Você será avisado aqui quando uma solicitação sua for aprovada ou quando a devolução de um uniforme estiver chegando."
+                  : "Quando houver solicitações de alunos, uniformes não devolvidos, itens vencidos ou novas movimentações, elas aparecem aqui."}
               </Text>
             </View>
           )}
@@ -327,7 +340,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1B4A3B",
   },
   title: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
     color: "#ffffff",
   },
@@ -345,7 +358,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.14)",
   },
   markAllText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#cfe3da",
     fontWeight: "600",
   },
@@ -379,7 +392,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1B4A3B",
   },
   tabText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#5f6368",
     fontWeight: "500",
   },
@@ -395,7 +408,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   groupLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#5f6368",
     textTransform: "uppercase",
@@ -427,8 +440,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionButton: {
-    minWidth: 84,
-    height: 32,
+    minWidth: 96,
+    minHeight: 40,
     paddingHorizontal: 14,
     borderRadius: 4,
     alignItems: "center",
@@ -449,17 +462,17 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   actionButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: "#ffffff",
   },
   backButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: "#495057",
   },
   actionError: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#c62828",
     marginBottom: 8,
   },
@@ -469,7 +482,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    fontSize: 12,
+    fontSize: 14,
     color: "#202124",
     backgroundColor: "#ffffff",
     minHeight: 48,
@@ -503,7 +516,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   itemTitle: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#202124",
     lineHeight: 18,
   },
@@ -511,13 +524,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   itemMessage: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#5f6368",
     marginTop: 2,
     lineHeight: 16,
   },
   itemTime: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#80868b",
     marginTop: 4,
   },
@@ -532,18 +545,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emptyTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "600",
     color: "#202124",
     marginBottom: 4,
   },
   emptyText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#5f6368",
     textAlign: "center",
   },
   errorText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#c62828",
     textAlign: "center",
   },

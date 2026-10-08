@@ -19,7 +19,8 @@ const soAluno = allowRoles('aluno');
 const equipe = allowRoles('admin', 'coordenador', 'professor');
 
 // ----- Aluno -----
-// Materiais que ele pode pedir (ativos, com estoque, EPI/Uniforme).
+// EPIs que ele pode pedir (ativos e com estoque). Uniforme não entra aqui:
+// só dá pra pegar por empréstimo (ver emprestimo.routes.js).
 router.get('/materiais-disponiveis', soAluno, listMateriaisDisponiveis);
 // Pedidos do próprio aluno (pendentes + histórico).
 router.get('/minhas', soAluno, listMinhasSolicitacoes);

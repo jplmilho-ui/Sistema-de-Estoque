@@ -4,6 +4,7 @@ import {
 import { router } from "expo-router";
 
 import AppBar from "../components/AppBar";
+import TabelaRolavel from "../components/TabelaRolavel";
 import PageHeader from "../components/PageHeader";
 import SearchBox from "../components/SearchBox";
 import { confirmAction } from "../utils/confirmAction";
@@ -632,6 +633,7 @@ export default function Usuarios() {
             LISTA DE USUÁRIOS
     */}
 
+        <TabelaRolavel larguraMinima={820}>
         <View style={styles.listCard}>
 
           {/* Cabeçalho da tabela */}
@@ -871,6 +873,7 @@ export default function Usuarios() {
             })}
 
         </View>
+        </TabelaRolavel>
 
       </ScrollView>
 
@@ -894,7 +897,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   newButtonText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#ed0000",
     fontWeight: "600",
   },
@@ -906,7 +909,7 @@ const styles = StyleSheet.create({
     maxWidth: 420,
   },
   formTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
     color: "#202124",
     marginBottom: 16,
@@ -917,14 +920,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: 17,
     color: "#202124",
     marginBottom: 10,
     backgroundColor: "#ffffff",
   },
 
   roleLabel: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
     marginTop: 4,
     marginBottom: 8,
@@ -948,7 +951,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff0f0",
   },
   roleOptionText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
   },
   roleOptionTextActive: {
@@ -965,7 +968,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   tipoLabel: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
     marginRight: 4,
   },
@@ -982,7 +985,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1B4A3B",
   },
   tipoChipText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
   },
   tipoChipTextActive: {
@@ -990,7 +993,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   contagemText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#80868b",
     marginLeft: "auto",
   },
@@ -1004,7 +1007,7 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     color: "#ffffff",
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "500",
   },
   buttonDisabled: {
@@ -1012,7 +1015,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: "#c62828",
-    fontSize: 13,
+    fontSize: 15,
     marginBottom: 12,
   },
   listCard: {
@@ -1034,13 +1037,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
   },
   headerText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: "#5f6368",
     textTransform: "uppercase",
   },
   cell: {
-    fontSize: 14,
+    fontSize: 16,
     color: "#202124",
   },
 
@@ -1065,7 +1068,7 @@ const styles = StyleSheet.create({
   },
 
   roleBadge: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1105,7 +1108,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   deleteButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#ed0000",
     fontWeight: "600",
   },
@@ -1115,6 +1118,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: "#5f6368",
-    fontSize: 14,
+    fontSize: 16,
   },
 });

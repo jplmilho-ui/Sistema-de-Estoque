@@ -1,12 +1,19 @@
 // Tela "Solicitações" — única tela do ALUNO (versão reduzida do sistema).
 //
 // O aluno pode:
-//   - criar uma nova solicitação de material/EPI/uniforme;
+//   - SOLICITAR EPI (passa por aprovação de professor/coordenador/admin);
 //   - acompanhar as solicitações pendentes (e cancelar, se desistir);
 //   - ver o histórico das já respondidas (aprovadas, recusadas, canceladas).
 //
-// Quem aprova ou recusa são admin, coordenador e professor, pelo sino de
-// notificações (ver components/NotificationsPopup.js).
+// UNIFORME não pode ser solicitado: o aluno só consegue PEDIR EMPRESTADO.
+// Ele informa a data de devolução e o pedido fica PENDENTE até um professor,
+// coordenador ou admin confirmar (só então o uniforme sai do estoque e o
+// aluno pode retirar). Depois da confirmação ele baixa o termo em PDF pra
+// assinar. Os empréstimos e seus prazos aparecem aqui mesmo, e os avisos de
+// resposta e de devolução chegam pelo sino de notificações.
+//
+// Quem aprova ou recusa solicitações são admin, coordenador e professor,
+// pelo sino de notificações (ver components/NotificationsPopup.js).
 import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
@@ -21,6 +28,8 @@ import {
 import { router } from "expo-router";
 import AppBar from "../components/AppBar";
 import PageHeader from "../components/PageHeader";
+import useLayout from "../components/useLayout";
+import { CartaoEmprestimoAluno } from "../components/emprestimoComum";
 import { confirmAction } from "../utils/confirmAction";
 import { getSession } from "../services/authStorage";
 import {
@@ -29,16 +38,42 @@ import {
   criarSolicitacao,
   cancelarSolicitacao,
 } from "../services/solicitacoesApi";
+import {
+  listUniformesDisponiveis,
+  listMeusEmprestimos,
+  criarEmprestimo,
+  cancelarEmprestimo,
+} from "../services/emprestimosApi";
+import { diasAte, formatarDataBR, hoje, lerDataBR, mascararData } from "../utils/datas";
 
 const QUANTIDADE_MAX_DIGITOS = 4;
 const OBSERVACAO_MAX = 300;
 const ATUALIZACAO_MS = 30 * 1000; // o aluno vê as respostas sem precisar recarregar
 
-const FILTROS_CATEGORIA = [
-  { key: "todas", label: "Todas" },
-  { key: "EPI", label: "EPI" },
-  { key: "Uniforme", label: "Uniforme" },
+const PRAZO_MAXIMO_PADRAO = 30;
+
+// Atalhos de data de devolução.
+const ATALHOS_PRAZO = [
+  { label: "Amanhã", dias: 1 },
+  { label: "Em 3 dias", dias: 3 },
+  { label: "Em 7 dias", dias: 7 },
 ];
+
+function dataEmDias(dias) {
+  const d = hoje();
+  d.setDate(d.getDate() + dias);
+  return formatarDataBR(d);
+}
+
+function validarDataDevolucao(texto, prazoMaximo) {
+  const data = lerDataBR(texto);
+  if (!data) return "Informe a data de devolução no formato DD/MM/AAAA.";
+
+  const dias = diasAte(data);
+  if (dias < 0) return "A data de devolução não pode ser anterior a hoje.";
+  if (dias > prazoMaximo) return `O prazo máximo de empréstimo é de ${prazoMaximo} dias.`;
+  return "";
+}
 
 // rótulo + estilo de cada status
 const STATUS_INFO = {
@@ -60,6 +95,8 @@ function formatarDataHora(iso) {
 }
 
 export default function Solicitacoes() {
+  const { celular } = useLayout();
+
   // CONTROLE DE ACESSO: só o aluno usa esta tela.
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [session, setSession] = useState(null);
@@ -73,12 +110,27 @@ export default function Solicitacoes() {
   const [formOpen, setFormOpen] = useState(false);
   const [materiais, setMateriais] = useState([]);
   const [loadingMateriais, setLoadingMateriais] = useState(false);
-  const [categoriaFiltro, setCategoriaFiltro] = useState("todas");
   const [materialId, setMaterialId] = useState(null);
   const [quantidade, setQuantidade] = useState("");
   const [observacao, setObservacao] = useState("");
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // O que o aluno quer fazer:
+  //   "solicitar"  -> pedir um EPI (precisa de aprovação)
+  //   "emprestimo" -> pedir um uniforme emprestado (também precisa de
+  //                   confirmação de um professor/coordenador)
+  // Uniforme só existe no modo "emprestimo"; EPI só no modo "solicitar".
+  const [emprestimos, setEmprestimos] = useState([]);
+  const [modo, setModo] = useState("solicitar");
+  const [dataTexto, setDataTexto] = useState("");
+  const [prazoMaximo, setPrazoMaximo] = useState(PRAZO_MAXIMO_PADRAO);
+  // uniformes que podem ser emprestados agora (ativos e com estoque)
+  const [uniformes, setUniformes] = useState([]);
+  // último pedido de empréstimo enviado (mostra o aviso de "aguardando")
+  const [criado, setCriado] = useState(null);
+  // id do pedido de empréstimo que está sendo cancelado
+  const [cancelingEmprestimoId, setCancelingEmprestimoId] = useState(null);
 
   // id do pedido que está sendo cancelado
   const [cancelingId, setCancelingId] = useState(null);
@@ -124,15 +176,27 @@ export default function Solicitacoes() {
     }
   }, []);
 
+  // Empréstimos do aluno. Erro aqui não derruba a tela: a lista de
+  // solicitações já mostra a mensagem de falha de conexão.
+  const loadEmprestimos = useCallback(async (token) => {
+    try {
+      const data = await listMeusEmprestimos(token);
+      setEmprestimos(data.emprestimos || []);
+    } catch (error) {
+      // mantém o que já estava na tela
+    }
+  }, []);
+
   useEffect(() => {
     if (!session?.token) return;
     loadSolicitacoes(session.token);
-    const timer = setInterval(
-      () => loadSolicitacoes(session.token, { silencioso: true }),
-      ATUALIZACAO_MS
-    );
+    loadEmprestimos(session.token);
+    const timer = setInterval(() => {
+      loadSolicitacoes(session.token, { silencioso: true });
+      loadEmprestimos(session.token);
+    }, ATUALIZACAO_MS);
     return () => clearInterval(timer);
-  }, [session, loadSolicitacoes]);
+  }, [session, loadSolicitacoes, loadEmprestimos]);
 
   async function loadMateriais() {
     setLoadingMateriais(true);
@@ -144,13 +208,23 @@ export default function Solicitacoes() {
     } finally {
       setLoadingMateriais(false);
     }
+
+    // Quais uniformes podem ser emprestados agora, e o prazo máximo.
+    try {
+      const unif = await listUniformesDisponiveis(session.token);
+      setUniformes(unif.materiais || []);
+      if (unif.regras?.prazoMaximoDias) setPrazoMaximo(unif.regras.prazoMaximoDias);
+    } catch (error) {
+      setUniformes([]); // sem a lista, não há uniforme pra emprestar
+    }
   }
 
   function resetForm() {
     setMaterialId(null);
     setQuantidade("");
     setObservacao("");
-    setCategoriaFiltro("todas");
+    setModo("solicitar");
+    setDataTexto("");
     setFormError("");
   }
 
@@ -160,29 +234,81 @@ export default function Solicitacoes() {
       resetForm();
       return;
     }
+    setCriado(null);
     setFormOpen(true);
     resetForm();
     loadMateriais(); // sempre busca a lista fresca ao abrir
   }
 
-  const materialSelecionado = materiais.find((m) => m.id === materialId) || null;
+  const emprestando = modo === "emprestimo";
 
-  const materiaisVisiveis =
-    categoriaFiltro === "todas"
-      ? materiais
-      : materiais.filter((m) => m.categoria === categoriaFiltro);
+  // Lista mostrada no formulário: uniformes (empréstimo) ou EPIs (pedido).
+  // O filtro por categoria é uma segunda barreira: o backend já só devolve
+  // EPI em /solicitacoes/materiais-disponiveis.
+  const materiaisVisiveis = emprestando
+    ? uniformes
+    : materiais.filter((m) => m.categoria === "EPI");
 
+  const materialSelecionado =
+    materiaisVisiveis.find((m) => m.id === materialId) || null;
+
+  const disponivelParaEmprestimo = materialSelecionado?.quantidade || 0;
+
+  function trocarModo(novoModo) {
+    if (novoModo === modo) return;
+    setModo(novoModo);
+    setMaterialId(null); // a lista muda: a escolha anterior não vale mais
+    setFormError("");
+  }
   async function handleSubmit() {
     setFormError("");
 
     if (!materialSelecionado) {
-      setFormError("Escolha o material que você precisa.");
+      setFormError(
+        emprestando
+          ? "Escolha o uniforme que você quer pegar emprestado."
+          : "Escolha o EPI que você precisa."
+      );
       return;
     }
 
     const qtd = Number(quantidade);
     if (!Number.isInteger(qtd) || qtd <= 0) {
       setFormError("Informe uma quantidade válida, maior que zero.");
+      return;
+    }
+
+    if (emprestando) {
+      if (qtd > disponivelParaEmprestimo) {
+        setFormError(
+          `Quantidade indisponível. Disponível: ${disponivelParaEmprestimo} ${materialSelecionado.unidadeMedida.toLowerCase()}(s).`
+        );
+        return;
+      }
+      const erroData = validarDataDevolucao(dataTexto, prazoMaximo);
+      if (erroData) {
+        setFormError(erroData);
+        return;
+      }
+
+      setSaving(true);
+      try {
+        const { emprestimo } = await criarEmprestimo(session.token, {
+          materialId: materialSelecionado.id,
+          quantidade: qtd,
+          dataDevolucao: dataTexto,
+          observacao: observacao.trim() || undefined,
+        });
+
+        setFormOpen(false);
+        resetForm();
+        setCriado(emprestimo);
+        await loadEmprestimos(session.token);
+      } catch (error) {
+        setFormError(error.message);
+      } finally {
+        setSaving(false);
+      }
       return;
     }
 
@@ -202,6 +328,26 @@ export default function Solicitacoes() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleCancelEmprestimo(emprestimo) {
+    confirmAction({
+      title: "Cancelar pedido de empréstimo",
+      message: `Deseja cancelar o pedido de ${emprestimo.quantidadeTexto} de "${emprestimo.materialNome}"?`,
+      confirmText: "Cancelar pedido",
+      cancelText: "Voltar",
+      onConfirm: async () => {
+        setCancelingEmprestimoId(emprestimo.id);
+        try {
+          await cancelarEmprestimo(session.token, emprestimo.id);
+        } catch (error) {
+          Alert.alert("Não foi possível cancelar", error.message);
+        } finally {
+          setCancelingEmprestimoId(null);
+          loadEmprestimos(session.token);
+        }
+      },
+    });
   }
 
   function handleCancel(solicitacao) {
@@ -230,6 +376,17 @@ export default function Solicitacoes() {
 
   const pendentes = solicitacoes.filter((s) => s.status === "pendente");
   const historico = solicitacoes.filter((s) => s.status !== "pendente");
+  // Empréstimos por situação:
+  //   pendente              -> aguardando confirmação (vai em "Em andamento")
+  //   emprestado            -> confirmado, aluno precisa devolver
+  //   devolvido/recusado/
+  //   cancelado             -> encerrados (vão no "Histórico")
+  const emprestimosPendentes = emprestimos.filter((e) => e.status === "pendente");
+  const emprestadosAbertos = emprestimos.filter((e) => e.status === "emprestado");
+  const emprestimosEncerrados = emprestimos.filter((e) =>
+    ["devolvido", "recusado", "cancelado"].includes(e.status)
+  );
+  const totalPendentes = pendentes.length + emprestimosPendentes.length;
 
   function renderCard(solicitacao) {
     const info = STATUS_INFO[solicitacao.status] || STATUS_INFO.pendente;
@@ -296,7 +453,7 @@ export default function Solicitacoes() {
     <AppBar>
       <PageHeader
         title="Solicitações"
-        subtitle="Peça materiais e acompanhe o andamento dos seus pedidos."
+        subtitle="Peça EPIs, pegue uniformes emprestados e acompanhe seus pedidos."
         actions={
           <TouchableOpacity style={styles.newButton} onPress={toggleForm}>
             <Text style={styles.newButtonText}>
@@ -306,30 +463,61 @@ export default function Solicitacoes() {
         }
       />
 
-      <ScrollView style={styles.space} contentContainerStyle={styles.spaceContent}>
+      <ScrollView
+        style={styles.space}
+        contentContainerStyle={[styles.spaceContent, celular && styles.spaceContentCelular]}
+      >
+        {/* AVISO DE PEDIDO DE EMPRÉSTIMO ENVIADO */}
+        {!!criado && (
+          <View style={styles.successCard}>
+            <Text style={styles.successTitle}>Pedido de empréstimo enviado</Text>
+            <Text style={styles.successText}>
+              Seu pedido de {criado.quantidadeTexto} de "{criado.materialNome}" está aguardando a
+              confirmação de um professor ou coordenador. Você só pode retirar o uniforme depois
+              da confirmação, e deve devolver até {criado.dataDevolucao}. Você será avisado pelo
+              sino de notificações.
+            </Text>
+            <View style={styles.successActions}>
+              <TouchableOpacity style={styles.ghostButton} onPress={() => setCriado(null)}>
+                <Text style={styles.ghostButtonText}>Fechar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* FORMULÁRIO */}
         {formOpen && (
           <View style={styles.formCard}>
-            <Text style={styles.formTitle}>Nova solicitação</Text>
+            <Text style={styles.formTitle}>
+              {emprestando ? "Pedido de empréstimo de uniforme" : "Solicitação de EPI"}
+            </Text>
 
-            <Text style={styles.fieldLabel}>Material</Text>
-
+            <Text style={styles.fieldLabel}>O que você quer fazer?</Text>
             <View style={styles.chipRow}>
-              {FILTROS_CATEGORIA.map((opcao) => {
-                const ativo = categoriaFiltro === opcao.key;
-                return (
-                  <TouchableOpacity
-                    key={opcao.key}
-                    style={[styles.chip, ativo && styles.chipActive]}
-                    onPress={() => setCategoriaFiltro(opcao.key)}
-                  >
-                    <Text style={[styles.chipText, ativo && styles.chipTextActive]}>
-                      {opcao.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+              <TouchableOpacity
+                style={[styles.chip, !emprestando && styles.chipActive]}
+                onPress={() => trocarModo("solicitar")}
+              >
+                <Text style={[styles.chipText, !emprestando && styles.chipTextActive]}>
+                  Solicitar EPI
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.chip, emprestando && styles.chipActive]}
+                onPress={() => trocarModo("emprestimo")}
+              >
+                <Text style={[styles.chipText, emprestando && styles.chipTextActive]}>
+                  Emprestar uniforme
+                </Text>
+              </TouchableOpacity>
             </View>
+            <Text style={styles.fieldHelp}>
+              {emprestando
+                ? "O pedido precisa ser confirmado por um professor ou coordenador. Você só retira o uniforme depois da confirmação e precisa devolver na data escolhida."
+                : "O pedido de EPI precisa ser aprovado por um professor ou coordenador."}
+            </Text>
+
+            <Text style={styles.fieldLabel}>{emprestando ? "Uniforme" : "EPI"}</Text>
 
             <View style={styles.materialList}>
               {loadingMateriais && (
@@ -341,9 +529,9 @@ export default function Solicitacoes() {
               {!loadingMateriais && materiaisVisiveis.length === 0 && (
                 <View style={styles.centerBox}>
                   <Text style={styles.emptyText}>
-                    {materiais.length === 0
-                      ? "Nenhum material disponível para solicitação no momento."
-                      : `Nenhum material disponível na categoria ${categoriaFiltro}.`}
+                    {emprestando
+                      ? "Nenhum uniforme disponível para empréstimo no momento."
+                      : "Nenhum EPI disponível para solicitação no momento."}
                   </Text>
                 </View>
               )}
@@ -389,6 +577,42 @@ export default function Solicitacoes() {
               editable={!saving}
             />
 
+            {emprestando && (
+              <>
+                <Text style={styles.fieldLabel}>Data de devolução</Text>
+                <View style={styles.chipRow}>
+                  {ATALHOS_PRAZO.map((atalho) => {
+                    const valor = dataEmDias(atalho.dias);
+                    const ativo = dataTexto === valor;
+                    return (
+                      <TouchableOpacity
+                        key={atalho.label}
+                        style={[styles.chip, ativo && styles.chipActive]}
+                        onPress={() => setDataTexto(valor)}
+                        disabled={saving}
+                      >
+                        <Text style={[styles.chipText, ativo && styles.chipTextActive]}>
+                          {atalho.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="DD/MM/AAAA"
+                  value={dataTexto}
+                  onChangeText={(texto) => setDataTexto(mascararData(texto))}
+                  keyboardType="numeric"
+                  maxLength={10}
+                  editable={!saving}
+                />
+                <Text style={styles.fieldHelp}>
+                  Prazo máximo: {prazoMaximo} dias a partir de hoje.
+                </Text>
+              </>
+            )}
+
             <Text style={styles.fieldLabel}>Observação (opcional)</Text>
             <TextInput
               style={[styles.input, styles.inputMultiline]}
@@ -410,7 +634,9 @@ export default function Solicitacoes() {
               {saving ? (
                 <ActivityIndicator color="#ffffff" />
               ) : (
-                <Text style={styles.saveButtonText}>Enviar solicitação</Text>
+                <Text style={styles.saveButtonText}>
+                  {emprestando ? "Enviar pedido de empréstimo" : "Enviar solicitação"}
+                </Text>
               )}
             </TouchableOpacity>
           </View>
@@ -433,24 +659,54 @@ export default function Solicitacoes() {
 
         {!loadingList && !listError && (
           <>
-            {/* EM ANDAMENTO */}
+            {/* UNIFORMES EMPRESTADOS (com prazo de devolução) */}
+            {emprestadosAbertos.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>
+                  Uniformes para devolver ({emprestadosAbertos.length})
+                </Text>
+                {emprestadosAbertos.map((e) => (
+                  <CartaoEmprestimoAluno key={`emp-${e.id}`} emprestimo={e} />
+                ))}
+              </>
+            )}
+
+            {/* EM ANDAMENTO: solicitações de EPI e pedidos de empréstimo
+                aguardando confirmação */}
             <Text style={styles.sectionTitle}>
-              Em andamento{pendentes.length > 0 ? ` (${pendentes.length})` : ""}
+              Em andamento{totalPendentes > 0 ? ` (${totalPendentes})` : ""}
             </Text>
-            {pendentes.length === 0 ? (
-              <Text style={styles.sectionEmpty}>Você não tem solicitações pendentes.</Text>
+            {totalPendentes === 0 ? (
+              <Text style={styles.sectionEmpty}>
+                Você não tem pedidos aguardando resposta.
+              </Text>
             ) : (
-              pendentes.map(renderCard)
+              <>
+                {pendentes.map(renderCard)}
+                {emprestimosPendentes.map((e) => (
+                  <CartaoEmprestimoAluno
+                    key={`emp-${e.id}`}
+                    emprestimo={e}
+                    onCancelar={handleCancelEmprestimo}
+                    cancelando={cancelingEmprestimoId === e.id}
+                  />
+                ))}
+              </>
             )}
 
             {/* HISTÓRICO */}
             <Text style={styles.sectionTitle}>Histórico</Text>
-            {historico.length === 0 ? (
+            {historico.length === 0 && emprestimosEncerrados.length === 0 ? (
               <Text style={styles.sectionEmpty}>
-                Suas solicitações respondidas aparecem aqui.
+                Seus pedidos respondidos e uniformes devolvidos aparecem aqui.
               </Text>
             ) : (
-              historico.map(renderCard)
+              <>
+                {historico.map(renderCard)}
+                {emprestimosEncerrados.map((e) => (
+                  <CartaoEmprestimoAluno key={`emp-${e.id}`} emprestimo={e} />
+                ))}
+              </>
             )}
           </>
         )}
@@ -468,18 +724,57 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 40,
   },
+  spaceContentCelular: {
+    paddingHorizontal: 16,
+  },
+
+  // aviso de empréstimo registrado
+  successCard: {
+    backgroundColor: "#e6f4ea",
+    borderRadius: 10,
+    padding: 18,
+    marginBottom: 24,
+    maxWidth: 720,
+  },
+  successTitle: { fontSize: 18, fontWeight: "600", color: "#1b6b3a", marginBottom: 6 },
+  successText: { fontSize: 16, color: "#202124", lineHeight: 23, marginBottom: 14 },
+  successActions: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  saveButtonInline: {
+    backgroundColor: "#ed0000",
+    borderRadius: 6,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ghostButton: {
+    borderWidth: 1,
+    borderColor: "#495057",
+    borderRadius: 6,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+  },
+  ghostButtonText: { fontSize: 17, color: "#495057", fontWeight: "500" },
+  fieldHelp: { fontSize: 14, color: "#5f6368", marginBottom: 16, lineHeight: 20 },
 
   // botão do cabeçalho (mesmo padrão de "Novo usuário"/"Novo material")
   newButton: {
     borderWidth: 1,
     borderColor: "#ed0000",
     borderRadius: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: "center",
     backgroundColor: "#ffffff",
   },
   newButtonText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#ed0000",
     fontWeight: "600",
   },
@@ -493,13 +788,13 @@ const styles = StyleSheet.create({
     maxWidth: 520,
   },
   formTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
     color: "#202124",
     marginBottom: 16,
   },
   fieldLabel: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
     marginBottom: 8,
   },
@@ -522,7 +817,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1B4A3B",
   },
   chipText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
   },
   chipTextActive: {
@@ -554,7 +849,7 @@ const styles = StyleSheet.create({
   },
   materialName: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 16,
     color: "#202124",
     paddingRight: 8,
   },
@@ -563,7 +858,7 @@ const styles = StyleSheet.create({
     color: "#1B4A3B",
   },
   materialCategory: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#80868b",
   },
   input: {
@@ -572,7 +867,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: 17,
     color: "#202124",
     marginBottom: 16,
     backgroundColor: "#ffffff",
@@ -590,7 +885,7 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     color: "#ffffff",
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "500",
   },
   buttonDisabled: {
@@ -598,25 +893,25 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: "#c62828",
-    fontSize: 13,
+    fontSize: 15,
     marginBottom: 12,
   },
   retryText: {
     color: "#1B4A3B",
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "600",
   },
 
   // seções
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "600",
     color: "#202124",
     marginTop: 8,
     marginBottom: 12,
   },
   sectionEmpty: {
-    fontSize: 14,
+    fontSize: 16,
     color: "#5f6368",
     marginBottom: 24,
   },
@@ -626,7 +921,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: "#5f6368",
-    fontSize: 14,
+    fontSize: 16,
     textAlign: "center",
   },
 
@@ -650,32 +945,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   requestTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "600",
     color: "#202124",
   },
   requestMeta: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
     marginTop: 2,
   },
   requestDate: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#80868b",
     marginTop: 8,
   },
   requestNote: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#3c3c3c",
     marginTop: 6,
   },
   requestResult: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#1b6b3a",
     marginTop: 6,
   },
   requestResultRecusada: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#c62828",
     marginTop: 6,
   },
@@ -686,7 +981,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   waitingText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#80868b",
     fontStyle: "italic",
   },
@@ -699,7 +994,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   cancelButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#495057",
     fontWeight: "600",
   },
@@ -711,7 +1006,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   badgeText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
   },
   badgePendente: { backgroundColor: "#fff4e0" },

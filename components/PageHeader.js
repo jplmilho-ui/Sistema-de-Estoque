@@ -1,12 +1,18 @@
 //Cabeçalho de página (título, subtítulo opcional e ações à direita)
 import { View, Text, StyleSheet } from "react-native";
+import useLayout from "./useLayout";
 
 export default function PageHeader({ title, subtitle, actions }) {
+  const { celular } = useLayout();
+  const recuo = celular ? 16 : 24;
+
   return (
     <>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: recuo }]}>
         <View style={styles.titleBlock}>
-          <Text style={styles.headerTitle}>{title}</Text>
+          <Text style={[styles.headerTitle, celular && styles.headerTitleCelular]}>
+            {title}
+          </Text>
           {!!subtitle && <Text style={styles.headerSubtitle}>{subtitle}</Text>}
         </View>
 
@@ -27,19 +33,21 @@ const styles = StyleSheet.create({
     // estourar o cabeçalho
     flexWrap: "wrap",
     gap: 12,
-    paddingHorizontal: 24,
     paddingVertical: 16,
   },
   titleBlock: {
     flexShrink: 1,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: "600",
     color: "#1a1a1a",
   },
+  headerTitleCelular: {
+    fontSize: 22,
+  },
   headerSubtitle: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
     marginTop: 2,
   },

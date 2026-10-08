@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
 
   title: {
     fontFamily: 'Inter',
-    fontSize: 20,
+    fontSize: 24,
     color: '#202124',
     textAlign: 'center',
     marginBottom: 32,
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   },
 
   label: {
-    fontSize: 13,
+    fontSize: 15,
     color: '#3c3c3c',
     marginBottom: 6,
     fontFamily: 'Inter',
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: 17,
     color: '#202124',
     backgroundColor: '#ffffff',
     fontFamily: 'Inter',
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
   },
 
   forgotLink: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#3c3c3c',
     fontFamily: 'Inter',
     textDecorationLine: "underline"
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   errorText: {
     width: '100%',
     color: '#c62828',
-    fontSize: 13,
+    fontSize: 15,
     marginTop: -12,
     marginBottom: 16,
     fontFamily: 'Inter',
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
 
   buttonText: {
     color: '#101111',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     fontFamily: 'Inter',
   },

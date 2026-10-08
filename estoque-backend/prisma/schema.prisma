@@ -53,6 +53,13 @@ model User {
   // (professor/coordenador/admin) aprovou ou recusou.
   solicitacoesFeitas      Solicitacao[] @relation("SolicitacaoAluno")
   solicitacoesRespondidas Solicitacao[] @relation("SolicitacaoResponsavel")
+
+  // Empréstimos de uniforme que o aluno fez e devoluções que esta pessoa
+  // (professor/coordenador/admin) recebeu.
+  emprestimosFeitos      Emprestimo[] @relation("EmprestimoAluno")
+  emprestimosRecebidos   Emprestimo[] @relation("EmprestimoRecebedor")
+  // Pedidos de empréstimo que esta pessoa aprovou ou recusou.
+  emprestimosRespondidos Emprestimo[] @relation("EmprestimoResponsavel")
 }
 
 model Material {
@@ -79,17 +86,24 @@ model Material {
 
   movimentacoes Movimentacao[]
   solicitacoes  Solicitacao[]
+  emprestimos   Emprestimo[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// Histórico de entradas (colocar de volta) e saídas (retirar) de estoque.
-// Cada ação de retirar/devolver em um Material cria um registro aqui,
-// guardando quem fez (responsavel) e quando (createdAt).
+// Histórico de entradas (colocar de volta), saídas (retirar) e devoluções
+// de estoque. Cada ação de retirar/devolver em um Material cria um registro
+// aqui, guardando quem fez (responsavel) e quando (createdAt).
+//   entrada   -> material colocado/reposto no estoque
+//   saida     -> material retirado do estoque
+//   devolucao -> uniforme emprestado que voltou ao estoque (empréstimo
+//                devolvido). Também aumenta o estoque, mas aparece separado
+//                em Movimentações pra não se confundir com uma reposição.
 enum TipoMovimentacao {
   entrada
   saida
+  devolucao
 }
 
 model Movimentacao {
@@ -116,6 +130,9 @@ model Movimentacao {
 // Fluxo:
 //   pendente -> aprovada   (professor/coordenador/admin aprova: o estoque
 //                           é baixado e uma Movimentacao de saída é criada)
+//
+// O aluno só pode solicitar EPI. Uniforme ele só consegue pegar por
+// EMPRÉSTIMO (ver model Emprestimo, mais abaixo).
 //   pendente -> recusada   (com motivo opcional)
 //   pendente -> cancelada  (o próprio aluno desiste)
 //
@@ -156,4 +173,69 @@ model Solicitacao {
 
   @@index([alunoId])
   @@index([status])
+}
+
+// ---------------------------------------------------------------
+// Empréstimos de uniforme (aluno).
+//
+// O aluno PEDE o empréstimo e ele só vale depois que um professor,
+// coordenador ou admin CONFIRMA:
+//   pendente   -> pedido feito, aguardando confirmação. O estoque NÃO
+//                 muda e nenhuma Movimentacao é criada ainda.
+//   emprestado -> alguém da equipe confirmou: o estoque é baixado e uma
+//                 Movimentacao de saída é criada (em nome de quem
+//                 confirmou), tudo numa transação.
+//   recusado   -> a equipe recusou (com motivo opcional).
+//   cancelado  -> o próprio aluno desistiu enquanto estava pendente.
+//   devolvido  -> professor/coordenador/admin confirma que recebeu o
+//                 uniforme de volta: o estoque volta e uma Movimentacao
+//                 de devolução é criada (em nome de quem recebeu).
+//
+// Quem responder primeiro encerra o pedido (ver emprestimo.controller.js).
+//
+// "Atrasado" não é um status gravado: é calculado — empréstimo ainda
+// "emprestado" cuja dataDevolucaoPrevista já passou (ver
+// emprestimo.controller.js). Assim nunca fica desatualizado.
+// ---------------------------------------------------------------
+enum StatusEmprestimo {
+  pendente
+  emprestado
+  devolvido
+  recusado
+  cancelado
+}
+
+model Emprestimo {
+  id         Int              @id @default(autoincrement())
+  quantidade Int              // na mesma unidade de medida do material
+  observacao String?
+  status     StatusEmprestimo @default(pendente)
+
+  // Dia combinado para devolver (só a data, sem hora).
+  dataDevolucaoPrevista DateTime @db.Date
+
+  // Preenchidos quando o pedido é confirmado ou recusado pela equipe.
+  motivoRecusa    String?
+  respondidoPorId Int?
+  respondidoPor   User?     @relation("EmprestimoResponsavel", fields: [respondidoPorId], references: [id], onDelete: Restrict)
+  respondidoEm    DateTime?
+
+  // Preenchidos quando o uniforme volta.
+  devolvidoEm   DateTime?
+  recebidoPorId Int?
+  recebidoPor   User?     @relation("EmprestimoRecebedor", fields: [recebidoPorId], references: [id], onDelete: Restrict)
+
+  alunoId Int
+  // Restrict: não deixa excluir um aluno que tem empréstimo registrado
+  // (o uniforme saiu do estoque em nome dele).
+  aluno   User @relation("EmprestimoAluno", fields: [alunoId], references: [id], onDelete: Restrict)
+
+  materialId Int
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([alunoId])
+  @@index([status, dataDevolucaoPrevista])
 }

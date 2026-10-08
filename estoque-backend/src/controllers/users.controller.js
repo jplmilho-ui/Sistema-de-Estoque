@@ -158,7 +158,7 @@ async function deleteUser(req, res) {
     if (error.code === 'P2003') {
       return res.status(409).json({
         error:
-          'Não é possível excluir esse usuário porque ele possui movimentações de estoque ou respostas a solicitações registradas em seu nome. Para preservar o histórico, não é permitido excluir contas com esses registros vinculados.',
+          'Não é possível excluir esse usuário porque ele possui movimentações de estoque, empréstimos ou respostas a solicitações registradas em seu nome. Para preservar o histórico, não é permitido excluir contas com esses registros vinculados.',
       });
     }
     console.error(error);

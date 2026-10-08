@@ -9,6 +9,13 @@
 //   Solicitações de alunos (PRIORIDADE)
 //     - pedidos pendentes, com os botões Aprovar / Recusar
 //     - respostas recentes ("Aprovada por Fulano"), só informativas
+//   Pedidos de empréstimo de uniforme (PRIORIDADE)
+//     - pedidos aguardando confirmação, com os botões Aprovar / Recusar
+//       (aprovar = confirmar o empréstimo: o uniforme sai do estoque)
+//   Uniformes não devolvidos
+//     - empréstimo de aluno cuja data de devolução já passou, com link
+//       para Estoque > aba "Empréstimos de uniforme" (onde a devolução é
+//       registrada)
 //   Alertas
 //     - material vencido
 //     - material que vence nos próximos 30 dias (mesma janela do resumo
@@ -19,6 +26,10 @@
 //
 // ALUNO recebe SOMENTE:
 //   - aviso de que uma solicitação dele foi aprovada
+//   - aviso de que um pedido de empréstimo de uniforme foi confirmado
+//     (pode retirar) ou recusado
+//   - aviso de devolução de uniforme: nos 2 dias antes do prazo (e no dia)
+//     e, depois, enquanto estiver atrasado
 //
 // "Lida / não lida" é guardado no aparelho (AsyncStorage), por usuário.
 
@@ -26,6 +37,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { listMaterials } from "./materialApi";
 import { listMovimentacoes } from "./movimentacoesApi";
 import { listSolicitacoes, listMinhasSolicitacoes } from "./solicitacoesApi";
+import { listEmprestimos, listMeusEmprestimos } from "./emprestimosApi";
 import { parseDataBR, isVencido } from "../utils/validade";
 
 const DIAS_ALERTA_VALIDADE = 30;
@@ -165,13 +177,15 @@ function montarAlertas(materials) {
 
 function montarMovimentacoes(movimentacoes) {
   return movimentacoes.slice(0, MAX_MOVIMENTACOES).map((mov) => {
-    const entrada = mov.tipo === "entrada";
+    const tipo = mov.tipo === "entrada" || mov.tipo === "devolucao" ? mov.tipo : "saida";
+    const verbo =
+      tipo === "entrada" ? "adicionou" : tipo === "devolucao" ? "recebeu de volta" : "retirou";
     return {
       id: `mov:${mov.id}`,
       grupo: "movimentacoes",
-      tipo: entrada ? "entrada" : "saida",
+      tipo,
       title: `${mov.materialNome}`,
-      message: `${mov.responsavel} ${entrada ? "adicionou" : "retirou"} ${mov.quantidade}.`,
+      message: `${mov.responsavel} ${verbo} ${mov.quantidade}.`,
       timeLabel: tempoRelativo(parseDataHoraBR(mov.data)) || mov.data,
       href: "/movimentacoes",
     };
@@ -245,54 +259,209 @@ function montarAprovacoesAluno(solicitacoes) {
     }));
 }
 
+// ---------------------------------------------------------------
+// EMPRÉSTIMOS DE UNIFORME
+// ---------------------------------------------------------------
+
+function textoAtraso(dias) {
+  const n = Math.abs(dias);
+  return `Atrasado há ${n} ${plural(n, "dia", "dias")}`;
+}
+
+function textoVencimento(dias) {
+  if (dias === 0) return "Vence hoje";
+  if (dias === 1) return "Vence amanhã";
+  return `Vence em ${dias} dias`;
+}
+
+// Aluno: devoluções chegando (até 2 dias antes, vem do backend em
+// `venceEmBreve`) e atrasadas. O id do aviso de prazo inclui os dias que
+// faltam, então a cada dia o aviso volta como NÃO lido ("vence em 2 dias"
+// -> "vence amanhã" -> "vence hoje").
+function montarEmprestimosAluno(emprestimos) {
+  return emprestimos
+    .filter((e) => e.status === "emprestado" && (e.atrasado || e.venceEmBreve))
+    .sort((a, b) => a.diasParaDevolucao - b.diasParaDevolucao)
+    .map((e) =>
+      e.atrasado
+        ? {
+            id: `emp-atraso:${e.id}`,
+            grupo: "emprestimos",
+            tipo: "emprestimo-atrasado",
+            title: `Devolução atrasada: ${e.materialNome}`,
+            message: `O prazo era ${e.dataDevolucao}. Leve o uniforme à coordenação o quanto antes.`,
+            timeLabel: textoAtraso(e.diasParaDevolucao),
+            href: "/solicitacoes",
+          }
+        : {
+            id: `emp-prazo:${e.id}:${e.diasParaDevolucao}`,
+            grupo: "emprestimos",
+            tipo: "emprestimo-prazo",
+            title: `Devolva ${e.materialNome} até ${e.dataDevolucao}`,
+            message: `${e.quantidadeTexto} emprestado(s). Não esqueça de levar na data combinada.`,
+            timeLabel: textoVencimento(e.diasParaDevolucao),
+            href: "/solicitacoes",
+          }
+    );
+}
+
+// Aluno: respostas aos pedidos de empréstimo (confirmado / recusado) dos
+// últimos dias. Confirmado só aparece enquanto o uniforme está com ele: o
+// aviso de prazo assume daí em diante.
+function montarRespostasEmprestimoAluno(emprestimos) {
+  const limite = Date.now() - DIAS_APROVACOES_ALUNO * MS_DIA;
+
+  return emprestimos
+    .filter((e) => (e.status === "emprestado" || e.status === "recusado") && e.respondidoEm)
+    .filter((e) => new Date(e.respondidoEm).getTime() >= limite)
+    .sort((a, b) => new Date(b.respondidoEm) - new Date(a.respondidoEm))
+    .slice(0, MAX_APROVACOES_ALUNO)
+    .map((e) =>
+      e.status === "emprestado"
+        ? {
+            id: `emp-confirmado:${e.id}`,
+            grupo: "solicitacoes",
+            tipo: "aprovada",
+            title: `Seu empréstimo de ${e.materialNome} foi confirmado`,
+            message: `${e.quantidadeTexto} — confirmado por ${e.respondidoPorNome}. Pode retirar o uniforme e devolver até ${e.dataDevolucao}.`,
+            timeLabel: tempoRelativo(new Date(e.respondidoEm)),
+            href: "/solicitacoes",
+          }
+        : {
+            id: `emp-recusado:${e.id}`,
+            grupo: "solicitacoes",
+            tipo: "recusada",
+            title: `Seu pedido de empréstimo de ${e.materialNome} foi recusado`,
+            message: e.motivoRecusa
+              ? `Recusado por ${e.respondidoPorNome}. Motivo: ${e.motivoRecusa}`
+              : `Recusado por ${e.respondidoPorNome}.`,
+            timeLabel: tempoRelativo(new Date(e.respondidoEm)),
+            href: "/solicitacoes",
+          }
+    );
+}
+
+// Equipe: pedidos de empréstimo AGUARDANDO confirmação (com Aprovar /
+// Recusar no sino), do mais antigo para o mais novo.
+function montarPedidosEmprestimoEquipe(emprestimos) {
+  return emprestimos
+    .filter((e) => e.status === "pendente")
+    .sort((a, b) => new Date(a.criadoEm) - new Date(b.criadoEm))
+    .map((e) => {
+      const detalhe = [
+        e.quantidadeTexto,
+        e.alunoRm ? `RM ${e.alunoRm}` : null,
+        `devolução até ${e.dataDevolucao}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+
+      return {
+        id: `emp-pedido:${e.id}`,
+        grupo: "solicitacoes",
+        // "solicitacao" é o tipo que mostra os botões Aprovar / Recusar
+        tipo: "solicitacao",
+        emprestimoId: e.id,
+        title: `${e.alunoNome} pediu emprestado ${e.materialNome}`,
+        message: e.observacao ? `${detalhe} — "${e.observacao}"` : detalhe,
+        timeLabel: tempoRelativo(new Date(e.criadoEm)),
+      };
+    });
+}
+
+// Equipe (admin/coordenador/professor): só o que NÃO foi devolvido e já
+// passou do prazo, do mais atrasado para o menos.
+function montarEmprestimosEquipe(emprestimos) {
+  return emprestimos
+    .filter((e) => e.status === "emprestado" && e.atrasado)
+    .sort((a, b) => a.diasParaDevolucao - b.diasParaDevolucao)
+    .map((e) => ({
+      id: `emp-atraso:${e.id}`,
+      grupo: "emprestimos",
+      tipo: "emprestimo-atrasado",
+      title: `${e.alunoNome} ainda não devolveu ${e.materialNome}`,
+      message: [e.quantidadeTexto, e.alunoRm ? `RM ${e.alunoRm}` : null, `prazo ${e.dataDevolucao}`]
+        .filter(Boolean)
+        .join(" · "),
+      timeLabel: textoAtraso(e.diasParaDevolucao),
+      href: "/estoque",
+      params: { aba: "emprestimos", filtro: "atrasados" },
+    }));
+}
+
 // Busca os dados do perfil logado e devolve:
 //   { items, completo, falhou }
 // "completo" é false se alguma busca falhou — nesse caso quem chama não
 // deve "limpar" o histórico de lidas (senão uma falha de rede faria
 // notificações antigas voltarem como não lidas).
 export async function carregarNotificacoes(token, role) {
-  // ----- ALUNO: só aprovações das próprias solicitações -----
+  // ----- ALUNO: aprovações das próprias solicitações + prazos de devolução -----
   if (role === "aluno") {
-    try {
-      const { solicitacoes } = await listMinhasSolicitacoes(token);
-      return {
-        items: montarAprovacoesAluno(solicitacoes || []),
-        completo: true,
-        falhou: false,
-      };
-    } catch (e) {
+    const [solRes, empRes] = await Promise.allSettled([
+      listMinhasSolicitacoes(token),
+      listMeusEmprestimos(token),
+    ]);
+
+    if (solRes.status !== "fulfilled" && empRes.status !== "fulfilled") {
       return { items: [], completo: false, falhou: true };
     }
+
+    const aprovacoes =
+      solRes.status === "fulfilled"
+        ? montarAprovacoesAluno(solRes.value.solicitacoes || [])
+        : [];
+    const devolucoes =
+      empRes.status === "fulfilled"
+        ? montarEmprestimosAluno(empRes.value.emprestimos || [])
+        : [];
+    const respostasEmprestimo =
+      empRes.status === "fulfilled"
+        ? montarRespostasEmprestimoAluno(empRes.value.emprestimos || [])
+        : [];
+
+    return {
+      // prazos de devolução primeiro (o grupo também é ordenado no pop-up)
+      items: [...devolucoes, ...respostasEmprestimo, ...aprovacoes],
+      completo: solRes.status === "fulfilled" && empRes.status === "fulfilled",
+      falhou: false,
+    };
   }
 
   // ----- ADMIN / COORDENADOR / PROFESSOR -----
-  const [materiaisRes, movsRes, solRes] = await Promise.allSettled([
+  const [materiaisRes, movsRes, solRes, empRes] = await Promise.allSettled([
     listMaterials(token, { ativo: true }),
     listMovimentacoes(token),
     listSolicitacoes(token),
+    listEmprestimos(token),
   ]);
 
   const materiaisOk = materiaisRes.status === "fulfilled";
   const movsOk = movsRes.status === "fulfilled";
   const solOk = solRes.status === "fulfilled";
+  const empOk = empRes.status === "fulfilled";
 
   // Quem não tem permissão pra ver materiais simplesmente não recebe os
   // alertas — isso não é um erro da tela.
   const materialsPermitido =
     materiaisOk || /permiss/i.test(materiaisRes.reason?.message || "");
 
-  if (!materiaisOk && !movsOk && !solOk) {
+  if (!materiaisOk && !movsOk && !solOk && !empOk) {
     throw solRes.reason || movsRes.reason || materiaisRes.reason;
   }
 
   const solicitacoes = solOk ? montarSolicitacoesEquipe(solRes.value.solicitacoes || []) : [];
+  const emprestimos = empOk ? montarEmprestimosEquipe(empRes.value.emprestimos || []) : [];
+  const pedidosEmprestimo = empOk
+    ? montarPedidosEmprestimoEquipe(empRes.value.emprestimos || [])
+    : [];
   const alertas = materiaisOk ? montarAlertas(materiaisRes.value.materials || []) : [];
   const movs = movsOk ? montarMovimentacoes(movsRes.value.movimentacoes || []) : [];
 
   return {
-    // solicitações de alunos vêm primeiro (prioridade)
-    items: [...solicitacoes, ...alertas, ...movs],
-    completo: (materiaisOk || materialsPermitido) && movsOk && solOk,
+    // solicitações de alunos e pedidos de empréstimo vêm primeiro
+    // (prioridade), depois os uniformes não devolvidos
+    items: [...solicitacoes, ...pedidosEmprestimo, ...emprestimos, ...alertas, ...movs],
+    completo: (materiaisOk || materialsPermitido) && movsOk && solOk && empOk,
     falhou: false,
   };
 }

@@ -3,6 +3,7 @@ import {View,Text,TextInput,TouchableOpacity,StyleSheet,ScrollView,ActivityIndic
 import { router } from "expo-router";
 import { confirmAction } from "../utils/confirmAction";
 import AppBar from "../components/AppBar";
+import TabelaRolavel from "../components/TabelaRolavel";
 import PageHeader from "../components/PageHeader";
 import SearchBox from "../components/SearchBox";
 import { getSession } from "../services/authStorage";
@@ -609,6 +610,7 @@ export default function Materiais() {
 
         {/* LISTA DE MATERIAIS */}
 
+        <TabelaRolavel larguraMinima={900}>
         <View style={styles.listCard}>
           <View style={[styles.row, styles.rowHeader]}>
             <Text style={[styles.cell, styles.cellNome, styles.headerText]}>
@@ -760,6 +762,7 @@ export default function Materiais() {
               );
             })}
         </View>
+        </TabelaRolavel>
       </ScrollView>
     </AppBar>
   );
@@ -780,7 +783,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   newButtonText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#ed0000",
     fontWeight: "600",
   },
@@ -792,7 +795,7 @@ const styles = StyleSheet.create({
     maxWidth: 420,
   },
   formTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
     color: "#202124",
     marginBottom: 16,
@@ -803,19 +806,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: 17,
     color: "#202124",
     marginBottom: 10,
     backgroundColor: "#ffffff",
   },
   fieldLabel: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
     marginTop: 4,
     marginBottom: 8,
   },
   helperText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#1b4a3b",
     marginTop: -4,
     marginBottom: 12,
@@ -839,7 +842,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff0f0",
   },
   toggleOptionText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#5f6368",
   },
   toggleOptionTextActive: {
@@ -855,7 +858,7 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     color: "#ffffff",
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "500",
   },
   buttonDisabled: {
@@ -863,7 +866,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: "#c62828",
-    fontSize: 13,
+    fontSize: 15,
     marginBottom: 12,
   },
   listCard: {
@@ -885,13 +888,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
   },
   headerText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: "#5f6368",
     textTransform: "uppercase",
   },
   cell: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#202124",
   },
   cellNome: {
@@ -907,11 +910,11 @@ const styles = StyleSheet.create({
     flex: 1.5,
   },
   qtdPrincipal: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#202124",
   },
   qtdDetalhe: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#5f6368",
     marginTop: 2,
   },
@@ -933,7 +936,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   statusBadge: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -957,7 +960,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   actionButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#1a1a1a",
   },
   deleteButton: {
@@ -968,7 +971,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   deleteButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#ed0000",
     fontWeight: "600",
   },
@@ -978,6 +981,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: "#5f6368",
-    fontSize: 14,
+    fontSize: 16,
   },
 });

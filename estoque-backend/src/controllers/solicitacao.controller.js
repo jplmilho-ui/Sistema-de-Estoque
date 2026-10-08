@@ -16,7 +16,9 @@ const prisma = require('../lib/prisma');
 //     a retirada direta pela tela de Estoque continua como sempre foi.
 // ---------------------------------------------------------------
 
-const CATEGORIAS_SOLICITAVEIS = ['EPI', 'Uniforme'];
+// O aluno só pode SOLICITAR EPI. Uniforme não é solicitável: só dá pra
+// pegar por empréstimo (ver emprestimo.controller.js).
+const CATEGORIAS_SOLICITAVEIS = ['EPI'];
 const QUANTIDADE_MAXIMA = 9999;
 const TEXTO_MAXIMO = 300;
 const DIAS_RESPOSTAS_RECENTES = 7;
@@ -101,7 +103,7 @@ function serializeSolicitacao(s) {
 // ALUNO
 // ---------------------------------------------------------------
 
-// Materiais que o aluno pode escolher no formulário.
+// Materiais que o aluno pode escolher no formulário (somente EPI).
 async function listMateriaisDisponiveis(req, res) {
   try {
     const materiais = await prisma.material.findMany({

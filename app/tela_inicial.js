@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  ScrollView,
+} from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import AppBar from "../components/AppBar";
 import PageHeader from "../components/PageHeader";
 import Icon from "../components/Icon";
+import useLayout from "../components/useLayout";
 import { getSession } from "../services/authStorage";
 import { getResumo, listMaterials } from "../services/materialApi";
 import { listMovimentacoes } from "../services/movimentacoesApi";
@@ -11,6 +19,18 @@ import { isVencido } from "../utils/validade";
 
 // Quantas movimentações aparecem no painel "Últimas movimentações".
 const MAX_ULTIMAS_MOVIMENTACOES = 5;
+
+// Ícone, rótulo, sinal e cor de cada tipo de movimentação. A devolução de
+// um uniforme emprestado aumenta o estoque (+), mas tem visual próprio.
+const TIPOS_MOV = {
+  entrada: { label: "Entrada", sinal: "+", icon: "arrow-up", cor: "#1B4A3B", fundo: "#d9ede4" },
+  saida: { label: "Saída", sinal: "-", icon: "arrow-down", cor: "#c62828", fundo: "#f7dedb" },
+  devolucao: { label: "Devolução", sinal: "+", icon: "repeat", cor: "#1a56c4", fundo: "#e8f0fe" },
+};
+
+// Altura máxima das barras do gráfico (px). Pequena de propósito: o gráfico
+// e as últimas movimentações precisam caber na tela sem rolar a página.
+const ALTURA_MAX_BARRA = 110;
 
 // Mesmas categorias usadas no cadastro de Materiais — fixas, pra o
 // gráfico sempre mostrar as três colunas, mesmo com contagem zero.
@@ -24,6 +44,7 @@ const DATA_LABEL = new Date().toLocaleDateString("pt-BR", {
 });
 
 export default function tela_inicial() {
+  const { compacto, celular } = useLayout();
   const [checkingSession, setCheckingSession] = useState(true);
   const [session, setSession] = useState(null);
 
@@ -39,7 +60,7 @@ export default function tela_inicial() {
   const [loadingMaterials, setLoadingMaterials] = useState(true);
   const [materialsError, setMaterialsError] = useState("");
 
-  // Histórico de entradas e saídas (vem de GET /movimentacoes, já do mais
+  // Histórico de entradas, saídas e devoluções (vem de GET /movimentacoes, já do mais
   // novo pro mais antigo). Alimenta o card "Movimentações" (total) e o
   // painel "Últimas movimentações" (as mais recentes).
   const [movimentacoes, setMovimentacoes] = useState([]);
@@ -182,8 +203,11 @@ export default function tela_inicial() {
   return (
     <AppBar>
       <PageHeader title="Tela Inicial"/>
-      <View style={styles.Space}>
-        <View style={styles.contentArea}>
+      <ScrollView
+        style={styles.Space}
+        contentContainerStyle={{ flexGrow: 1 }}
+      >
+        <View style={[styles.contentArea, celular && styles.contentAreaCelular]}>
 
           {/* Saudação */}
           <View style={styles.greetingRow}>
@@ -247,7 +271,7 @@ export default function tela_inicial() {
                   >
                     <Icon
                       name={card.icon}
-                      size={22}
+                      size={18}
                       color={card.variant === "danger" ? "#c62828" : "#1B4A3B"}
                     />
                   </View>
@@ -265,10 +289,10 @@ export default function tela_inicial() {
           </View>
 
           {/* Gráfico + últimas movimentações */}
-          <View style={styles.panelsRow}>
+          <View style={[styles.panelsRow, compacto && styles.panelsRowCompacto]}>
 
             {/* Produtos Cadastrados — gráfico por categoria */}
-            <View style={styles.chartPanel}>
+            <View style={[styles.chartPanel, compacto && styles.panelCompacto]}>
               <View style={styles.panelHeaderRow}>
                 <View>
                   <Text style={styles.panelTitle}>Produtos Cadastrados</Text>
@@ -288,7 +312,7 @@ export default function tela_inicial() {
                       <View
                         style={[
                           styles.bar,
-                          { height: Math.max((quantidade / maxCategoriaCount) * 220, 6) },
+                          { height: Math.max((quantidade / maxCategoriaCount) * ALTURA_MAX_BARRA, 6) },
                         ]}
                       />
                       <Text style={styles.barLabel} numberOfLines={1}>
@@ -301,7 +325,7 @@ export default function tela_inicial() {
             </View>
 
             {/* Últimas movimentações */}
-            <View style={styles.movPanel}>
+            <View style={[styles.movPanel, compacto && styles.panelCompacto]}>
               <View style={styles.panelHeaderRow}>
                 <Text style={styles.panelTitle}>Últimas movimentações</Text>
                 <TouchableOpacity
@@ -322,55 +346,38 @@ export default function tela_inicial() {
                   Nenhuma movimentação registrada ainda.
                 </Text>
               ) : (
-                ultimasMovimentacoes.map((mov) => (
-                  <View key={mov.id} style={styles.movRow}>
-                    <View
-                      style={[
-                        styles.movIconCircle,
-                        mov.tipo === "entrada" ? styles.movIconEntrada : styles.movIconSaida,
-                      ]}
-                    >
-                      <Icon
-                        name={mov.tipo === "entrada" ? "arrow-up" : "arrow-down"}
-                        size={16}
-                        color={mov.tipo === "entrada" ? "#1B4A3B" : "#c62828"}
-                      />
+                ultimasMovimentacoes.map((mov) => {
+                  const tipo = TIPOS_MOV[mov.tipo] || TIPOS_MOV.saida;
+                  return (
+                    <View key={mov.id} style={styles.movRow}>
+                      <View style={[styles.movIconCircle, { backgroundColor: tipo.fundo }]}>
+                        <Icon name={tipo.icon} size={14} color={tipo.cor} />
+                      </View>
+                      <View style={styles.movInfo}>
+                        <Text style={styles.movNome} numberOfLines={1}>
+                          {mov.materialNome}
+                        </Text>
+                        <Text style={[styles.movTipo, { color: tipo.cor }]} numberOfLines={1}>
+                          {tipo.label}
+                          {mov.responsavel ? ` · ${mov.responsavel}` : ""}
+                        </Text>
+                      </View>
+                      <View style={styles.movRight}>
+                        <Text style={[styles.movQuantidade, { color: tipo.cor }]}>
+                          {tipo.sinal} {mov.quantidade}
+                        </Text>
+                        <Text style={styles.movData}>{mov.data}</Text>
+                      </View>
                     </View>
-                    <View style={styles.movInfo}>
-                      <Text style={styles.movNome} numberOfLines={1}>
-                        {mov.materialNome}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.movTipo,
-                          mov.tipo === "entrada" ? styles.movTipoEntrada : styles.movTipoSaida,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {mov.tipo === "entrada" ? "Entrada" : "Saída"}
-                        {mov.responsavel ? ` · ${mov.responsavel}` : ""}
-                      </Text>
-                    </View>
-                    <View style={styles.movRight}>
-                      <Text
-                        style={[
-                          styles.movQuantidade,
-                          mov.tipo === "entrada" ? styles.movTipoEntrada : styles.movTipoSaida,
-                        ]}
-                      >
-                        {mov.tipo === "entrada" ? "+" : "-"} {mov.quantidade}
-                      </Text>
-                      <Text style={styles.movData}>{mov.data}</Text>
-                    </View>
-                  </View>
-                ))
+                  );
+                })
               )}
             </View>
 
           </View>
 
         </View>
-      </View>
+      </ScrollView>
     </AppBar>
   );
 }
@@ -378,30 +385,35 @@ export default function tela_inicial() {
 const styles = StyleSheet.create({
   Space: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 10,
   },
 
   contentArea: {
     flex: 1,
     backgroundColor: "#f7f7f7",
     borderRadius: 7,
-    padding: 22,
+    padding: 14,
+  },
+  contentAreaCelular: {
+    padding: 12,
   },
 
   greetingRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 18,
+    alignItems: "center",
+    marginBottom: 10,
   },
 
   greetingTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "bold",
     color: "#0ba572",
-    marginBottom: 4,
+    marginBottom: 2,
   },
 
   greetingSubtitle: {
@@ -414,12 +426,12 @@ const styles = StyleSheet.create({
     borderColor: "#c9c9c9",
     borderRadius: 6,
     backgroundColor: "#ffffff",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
 
   dateBadgeText: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#1a1a1a",
   },
 
@@ -427,14 +439,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 20,
+    marginBottom: 10,
   },
 
   validationMessage: {
     backgroundColor: "#ffffff",
     borderRadius: 6,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
   },
 
   validationText: {
@@ -443,7 +455,7 @@ const styles = StyleSheet.create({
   },
 
   errorText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#c62828",
   },
 
@@ -451,37 +463,40 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 4,
     backgroundColor: "#1B4A3B",
-    paddingHorizontal: 22,
-    paddingVertical: 7,
+    paddingHorizontal: 18,
+    paddingVertical: 5,
   },
 
   verificarText: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#ffffff",
   },
 
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "bold",
     color: "#4a4b4a",
-    marginBottom: 12,
+    marginBottom: 8,
   },
 
   // Cards de resumo (linha com 4 cards)
   statsRow: {
     flexDirection: "row",
-    gap: 16,
-    marginBottom: 20,
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: 12,
   },
 
   statCard: {
     flex: 1,
+    minWidth: 180,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#ffffff",
     borderRadius: 8,
-    padding: 16,
-    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 10,
   },
 
   statCardDanger: {
@@ -489,9 +504,9 @@ const styles = StyleSheet.create({
   },
 
   statIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#d9ede4",
     alignItems: "center",
     justifyContent: "center",
@@ -508,11 +523,11 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
     color: "#5f6368",
-    marginBottom: 4,
+    marginBottom: 2,
   },
 
   statValue: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "bold",
     color: "#1a1a1a",
   },
@@ -520,29 +535,39 @@ const styles = StyleSheet.create({
   // Painéis (gráfico + movimentações)
   panelsRow: {
     flexDirection: "row",
-    gap: 20,
+    gap: 12,
     flex: 1,
+  },
+  // telas estreitas: um painel embaixo do outro, cada um com altura própria
+  panelsRowCompacto: {
+    flexDirection: "column",
+    flex: 0,
   },
 
   chartPanel: {
-    flex: 1.4,
+    flex: 1.2,
     backgroundColor: "#ffffff",
     borderRadius: 8,
-    padding: 20,
+    padding: 14,
+  },
+
+  panelCompacto: {
+    flex: 0,
+    minHeight: 220,
   },
 
   movPanel: {
     flex: 1,
     backgroundColor: "#ffffff",
     borderRadius: 8,
-    padding: 20,
+    padding: 14,
   },
 
   panelHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 8,
   },
 
   panelTitle: {
@@ -564,7 +589,7 @@ const styles = StyleSheet.create({
   },
 
   verTodasText: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#1B4A3B",
     fontWeight: "600",
   },
@@ -577,67 +602,59 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "center",
-    gap: 40,
-    marginTop: 10,
-    paddingBottom: 8,
+    gap: 36,
+    marginTop: 4,
+    paddingBottom: 4,
   },
 
   barColumn: {
     alignItems: "center",
     justifyContent: "flex-end",
-    width: 56,
+    width: 52,
   },
 
   barValue: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
     color: "#1a1a1a",
-    marginBottom: 6,
+    marginBottom: 4,
   },
 
   bar: {
-    width: 34,
+    width: 30,
     backgroundColor: "#1b4a3b",
     borderRadius: 4,
   },
 
   barLabel: {
-    fontSize: 11,
+    fontSize: 12,
     color: "#5f6368",
-    marginTop: 8,
+    marginTop: 6,
     textAlign: "center",
   },
 
   // Lista de últimas movimentações
   emptyMovText: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#8a8a8a",
-    marginTop: 12,
+    marginTop: 8,
   },
 
   movRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 6,
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
-    gap: 10,
+    gap: 8,
   },
 
   movIconCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
-  },
-
-  movIconEntrada: {
-    backgroundColor: "#d9ede4",
-  },
-
-  movIconSaida: {
-    backgroundColor: "#f7dedb",
   },
 
   movInfo: {
@@ -651,16 +668,8 @@ const styles = StyleSheet.create({
   },
 
   movTipo: {
-    fontSize: 11,
-    marginTop: 2,
-  },
-
-  movTipoEntrada: {
-    color: "#1B4A3B",
-  },
-
-  movTipoSaida: {
-    color: "#c62828",
+    fontSize: 12,
+    marginTop: 1,
   },
 
   movRight: {
@@ -677,8 +686,8 @@ const styles = StyleSheet.create({
   },
 
   movData: {
-    fontSize: 10,
+    fontSize: 11,
     color: "#8a8a8a",
-    marginTop: 2,
+    marginTop: 1,
   },
 });
