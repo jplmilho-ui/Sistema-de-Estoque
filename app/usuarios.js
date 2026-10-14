@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  View,Text,TextInput,TouchableOpacity,StyleSheet,ScrollView,ActivityIndicator,Alert,} from "react-native";
+  View,Text,TextInput,TouchableOpacity,StyleSheet,ScrollView,ActivityIndicator,Alert,Modal,} from "react-native";
 import { router } from "expo-router";
 
 import AppBar from "../components/AppBar";
@@ -17,6 +17,7 @@ import {
   listUsers,
   createUser,
   deleteUser,
+  resetUserPassword,
 } from "../services/usersApi";
 
 
@@ -133,6 +134,18 @@ export default function Usuarios() {
   // Guarda o ID do usuário que está sendo excluído.
   // Isso permite mostrar o ActivityIndicator somente naquele botão.
   const [deletingId, setDeletingId] = useState(null);
+
+  // ---------------------------------------------------------
+  // REDEFINIR A SENHA DE OUTRA PESSOA (janela)
+  // (a própria senha é trocada pelo ícone de perfil, no topo)
+  // ---------------------------------------------------------
+
+  const [senhaAlvo, setSenhaAlvo] = useState(null); // usuário que terá a senha trocada
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmaNovaSenha, setConfirmaNovaSenha] = useState("");
+  const [senhaError, setSenhaError] = useState("");
+  const [senhaSaving, setSenhaSaving] = useState(false);
+  const [senhaConcluida, setSenhaConcluida] = useState(null); // { nome }
 
 
   // VERIFICAÇÃO DE ACESSO
@@ -347,6 +360,47 @@ export default function Usuarios() {
 
 
   
+  // REDEFINIR SENHA
+
+  function openResetSenha(user) {
+    setSenhaAlvo(user);
+    setNovaSenha("");
+    setConfirmaNovaSenha("");
+    setSenhaError("");
+    setSenhaConcluida(null);
+  }
+
+  function closeResetSenha() {
+    if (senhaSaving) return; // não fecha no meio da requisição
+    setSenhaAlvo(null);
+    setSenhaConcluida(null);
+  }
+
+  async function handleSaveSenha() {
+    if (!senhaAlvo) return;
+
+    if (novaSenha.length < SENHA_MINIMA) {
+      setSenhaError(`A nova senha precisa ter pelo menos ${SENHA_MINIMA} caracteres.`);
+      return;
+    }
+    if (novaSenha !== confirmaNovaSenha) {
+      setSenhaError("A confirmação não é igual à nova senha.");
+      return;
+    }
+
+    setSenhaError("");
+    setSenhaSaving(true);
+
+    try {
+      await resetUserPassword(session.token, senhaAlvo.id, { password: novaSenha });
+      setSenhaConcluida({ nome: senhaAlvo.name });
+    } catch (error) {
+      setSenhaError(error?.message || "Não foi possível redefinir a senha.");
+    } finally {
+      setSenhaSaving(false);
+    }
+  }
+
   // CONFIRMAR EXCLUSÃO
 
 
@@ -633,7 +687,7 @@ export default function Usuarios() {
             LISTA DE USUÁRIOS
     */}
 
-        <TabelaRolavel larguraMinima={820}>
+        <TabelaRolavel larguraMinima={950}>
         <View style={styles.listCard}>
 
           {/* Cabeçalho da tabela */}
@@ -652,6 +706,16 @@ export default function Usuarios() {
               ]}
             >
               Nome
+            </Text>
+
+            <Text
+              style={[
+                styles.cell,
+                styles.cellRM,
+                styles.headerText,
+              ]}
+            >
+              RM
             </Text>
 
 
@@ -749,13 +813,13 @@ export default function Usuarios() {
               const isSelf =
                 user.id === session?.user?.id;
 
-              // Coordenador não pode excluir outro coordenador nem o
-              // admin — só o admin tem esse alcance.
-              // (O backend também barra isso; aqui é só pra nem
-              // mostrar o botão como clicável nesses casos.)
               const semPermissaoParaExcluir =
                 session?.user?.role === "coordenador" &&
                 ["coordenador", "admin"].includes(user.role);
+
+              // Redefinir a senha de OUTRA pessoa: mesma regra de hierarquia da
+              // exclusão (o backend confere). A própria senha é trocada no perfil.
+              const podeRedefinirSenha = !isSelf && !semPermissaoParaExcluir;
 
 
               return (
@@ -765,7 +829,7 @@ export default function Usuarios() {
                   style={styles.row}
                 >
 
-                  {/* Nome (e RM, se for aluno) */}
+                  {/* Nome */}
                   <Text
                     style={[
                       styles.cell,
@@ -774,7 +838,18 @@ export default function Usuarios() {
                     numberOfLines={1}
                   >
                     {user.name}
-                    {user.rm ? ` (RM ${user.rm})` : ""}
+                  </Text>
+
+
+                  {/* RM (só aluno tem; os demais mostram "—") */}
+                  <Text
+                    style={[
+                      styles.cell,
+                      styles.cellRM,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {user.rm || "—"}
                   </Text>
 
 
@@ -810,7 +885,7 @@ export default function Usuarios() {
                   </View>
 
 
-                  {/* Ação */}
+                  {/* Ações */}
                   <View
                     style={[
                       styles.cell,
@@ -818,6 +893,22 @@ export default function Usuarios() {
                     ]}
                   >
 
+                    {/* Redefinir senha */}
+                    <TouchableOpacity
+                      style={[
+                        styles.acaoButton,
+                        styles.acaoNeutra,
+                        !podeRedefinirSenha && styles.buttonDisabled,
+                      ]}
+                      onPress={() => openResetSenha(user)}
+                      disabled={!podeRedefinirSenha}
+                    >
+                      <Text style={[styles.acaoButtonText, styles.acaoNeutraText]}>
+                        Senha
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Excluir */}
                     <TouchableOpacity
                       style={[
                         styles.deleteButton,
@@ -877,6 +968,94 @@ export default function Usuarios() {
 
       </ScrollView>
 
+      {/* REDEFINIR SENHA */}
+      <Modal
+        visible={!!senhaAlvo}
+        transparent
+        animationType="fade"
+        onRequestClose={closeResetSenha}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            {senhaConcluida ? (
+              <>
+                <Text style={styles.formTitle}>Senha redefinida</Text>
+                <Text style={styles.modalText}>
+                  {`A senha de ${senhaConcluida.nome} foi redefinida. Passe a nova senha para a pessoa. Os logins antigos dela foram encerrados.`}
+                </Text>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={[styles.saveButton, styles.modalSaveButton]}
+                    onPress={closeResetSenha}
+                  >
+                    <Text style={styles.saveButtonText}>Fechar</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.formTitle}>Redefinir senha</Text>
+                <Text style={styles.modalText}>{senhaAlvo?.name}</Text>
+
+                <TextInput
+                  style={styles.input}
+                  placeholder={`Nova senha (mínimo ${SENHA_MINIMA} caracteres)`}
+                  value={novaSenha}
+                  onChangeText={(t) => {
+                    setNovaSenha(t);
+                    if (senhaError) setSenhaError("");
+                  }}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  editable={!senhaSaving}
+                />
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="Repita a nova senha"
+                  value={confirmaNovaSenha}
+                  onChangeText={(t) => {
+                    setConfirmaNovaSenha(t);
+                    if (senhaError) setSenhaError("");
+                  }}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  editable={!senhaSaving}
+                  onSubmitEditing={handleSaveSenha}
+                />
+
+                {!!senhaError && <Text style={styles.errorText}>{senhaError}</Text>}
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={styles.modalCancelButton}
+                    onPress={closeResetSenha}
+                    disabled={senhaSaving}
+                  >
+                    <Text style={styles.modalCancelText}>Cancelar</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.saveButton,
+                      styles.modalSaveButton,
+                      senhaSaving && styles.buttonDisabled,
+                    ]}
+                    onPress={handleSaveSenha}
+                    disabled={senhaSaving}
+                  >
+                    {senhaSaving ? (
+                      <ActivityIndicator color="#ffffff" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Salvar senha</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </AppBar>
   );
 }
@@ -1052,6 +1231,13 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
 
+  // RM: logo depois do nome (largura fixa mínima, o RM tem até 5 caracteres)
+  cellRM: {
+    flex: 1,
+    minWidth: 70,
+    paddingRight: 8,
+  },
+
   cellEmail: {
     flex: 3,
     paddingRight: 8,
@@ -1062,9 +1248,68 @@ const styles = StyleSheet.create({
     flex: 2,
   },
 
+  // dois botões lado a lado: Senha | Excluir
   cellAction: {
+    flex: 3,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  acaoButton: {
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minWidth: 64,
+    alignItems: "center",
+  },
+  acaoButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  acaoNeutra: { borderColor: "#5f6368" },
+  acaoNeutraText: { color: "#3c4043" },
+  // janela de redefinir senha
+  modalBackdrop: {
     flex: 1,
-    alignItems: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 10,
+    padding: 20,
+    width: "100%",
+    maxWidth: 380,
+  },
+  modalText: {
+    fontSize: 16,
+    color: "#3c4043",
+    marginBottom: 14,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 4,
+  },
+  modalCancelButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  modalCancelText: {
+    fontSize: 17,
+    color: "#5f6368",
+    fontWeight: "500",
+  },
+  modalSaveButton: {
+    paddingHorizontal: 18,
+    minHeight: 44,
   },
 
   roleBadge: {

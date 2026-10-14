@@ -1,16 +1,22 @@
 const prisma = require('../lib/prisma');
 
 // Libera as rotas de gerenciamento de usuários para Admin e Coordenador.
-// Use sempre DEPOIS do authMiddleware (que já preenche req.userId).
-// Consulta o banco de novo (em vez de confiar só no token) pra garantir
-// que, se alguém perder esse nível de acesso, o bloqueio é imediato.
+// Use sempre DEPOIS do authMiddleware (que já valida o token, confere que a
+// conta está ativa e deixa o usuário em req.user).
+// O papel vem do banco (não do token), pra garantir que, se alguém perder
+// esse nível de acesso, o bloqueio é imediato.
 async function adminMiddleware(req, res, next) {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+    const user =
+      req.user ||
+      (await prisma.user.findUnique({
+        where: { id: req.userId },
+        select: { id: true, role: true, ativo: true },
+      }));
 
     // admin está acima do coordenador na hierarquia, então os dois
     // passam por aqui.
-    if (!user || !['admin', 'coordenador'].includes(user.role)) {
+    if (!user || user.ativo === false || !['admin', 'coordenador'].includes(user.role)) {
       return res.status(403).json({ error: 'Acesso restrito a administradores e coordenadores.' });
     }
 

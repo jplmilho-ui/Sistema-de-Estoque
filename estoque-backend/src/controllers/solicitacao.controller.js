@@ -1,4 +1,12 @@
 const prisma = require('../lib/prisma');
+const { ErroNegocio } = require('../lib/erros');
+const {
+  lerQuantidadePositiva,
+  lerEntrada,
+  paraUnidades,
+  exigirFracionamento,
+  formatQuantidade,
+} = require('../lib/quantidade');
 
 // ---------------------------------------------------------------
 // SOLICITAÇÕES DE MATERIAL (aluno -> professor/coordenador/admin)
@@ -19,18 +27,10 @@ const prisma = require('../lib/prisma');
 // O aluno só pode SOLICITAR EPI. Uniforme não é solicitável: só dá pra
 // pegar por empréstimo (ver emprestimo.controller.js).
 const CATEGORIAS_SOLICITAVEIS = ['EPI'];
-const QUANTIDADE_MAXIMA = 9999;
+const QUANTIDADE_MAXIMA = 9999; // em UNIDADES, por pedido
 const TEXTO_MAXIMO = 300;
 const DIAS_RESPOSTAS_RECENTES = 7;
 const MAX_RESPOSTAS_RECENTES = 10;
-
-// Erro "esperado" (regra de negócio) com o status HTTP que deve voltar.
-class ErroNegocio extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
 
 function responderErro(res, error, mensagemPadrao) {
   if (error instanceof ErroNegocio) {
@@ -38,20 +38,6 @@ function responderErro(res, error, mensagemPadrao) {
   }
   console.error(error);
   return res.status(500).json({ error: mensagemPadrao });
-}
-
-// "2 caixas (100 un.)" / "5 un." — mesmo formato da tela de Movimentações.
-function formatQuantidade(quantidade, material) {
-  const { unidadeMedida, fatorConversao } = material;
-
-  if (unidadeMedida === 'Unidade') {
-    return `${quantidade} un.`;
-  }
-
-  const unidadeLower = unidadeMedida.toLowerCase();
-  const plural = quantidade === 1 ? unidadeLower : `${unidadeLower}s`;
-
-  return `${quantidade} ${plural} (${quantidade * fatorConversao} un.)`;
 }
 
 function parseId(valor) {
@@ -109,7 +95,7 @@ async function listMateriaisDisponiveis(req, res) {
     const materiais = await prisma.material.findMany({
       where: {
         ativo: true,
-        quantidade: { gt: 0 },
+        quantidadeTotal: { gt: 0 },
         categoria: { in: CATEGORIAS_SOLICITAVEIS },
       },
       orderBy: [{ categoria: 'asc' }, { nome: 'asc' }],
@@ -119,6 +105,8 @@ async function listMateriaisDisponiveis(req, res) {
         categoria: true,
         unidadeMedida: true,
         fatorConversao: true,
+        quantidadeTotal: true,
+        permiteFracionar: true,
       },
     });
 
@@ -131,27 +119,39 @@ async function listMateriaisDisponiveis(req, res) {
 async function criarSolicitacao(req, res) {
   try {
     const materialId = parseId(req.body.materialId);
-    const quantidade = Number(req.body.quantidade);
+    const quantidadeInformada = lerQuantidadePositiva(
+      req.body.quantidade,
+      QUANTIDADE_MAXIMA,
+      'pedido'
+    );
+    // Em que unidade o aluno digitou: "embalagem" (ex: caixas, o padrão)
+    // ou "unidade" (avulsas).
+    const entrada = lerEntrada(req.body.unidade);
     const observacao = textoOpcional(req.body.observacao, 'A observação');
-
-    if (!Number.isInteger(quantidade) || quantidade <= 0) {
-      throw new ErroNegocio(400, 'Informe uma quantidade válida, maior que zero.');
-    }
-    if (quantidade > QUANTIDADE_MAXIMA) {
-      throw new ErroNegocio(400, `A quantidade máxima por pedido é ${QUANTIDADE_MAXIMA}.`);
-    }
 
     const material = await prisma.material.findUnique({ where: { id: materialId } });
     if (!material || !material.ativo || !CATEGORIAS_SOLICITAVEIS.includes(material.categoria)) {
       throw new ErroNegocio(404, 'Material não encontrado ou indisponível para solicitação.');
     }
-    if (material.quantidade <= 0) {
+
+    exigirFracionamento(entrada, material);
+
+    // O pedido é guardado em UNIDADES.
+    const quantidade = paraUnidades(
+      quantidadeInformada,
+      entrada,
+      material,
+      QUANTIDADE_MAXIMA,
+      'pedido'
+    );
+
+    if (material.quantidadeTotal <= 0) {
       throw new ErroNegocio(400, 'Esse material está sem estoque no momento.');
     }
-    if (quantidade > material.quantidade) {
+    if (quantidade > material.quantidadeTotal) {
       throw new ErroNegocio(
         400,
-        `Quantidade indisponível. Disponível: ${material.quantidade} ${material.unidadeMedida.toLowerCase()}(s).`
+        `Quantidade indisponível. Disponível: ${formatQuantidade(material.quantidadeTotal, material)}.`
       );
     }
 
@@ -274,22 +274,18 @@ async function aprovarSolicitacao(req, res) {
       }
 
       // 2) Baixa o estoque só se ainda houver quantidade suficiente.
-      //    quantidadeTotal = quantidade * fatorConversao, então baixa
-      //    os dois na mesma proporção.
+      //    A quantidade do pedido já está em UNIDADES, a mesma do saldo.
       const { quantidade, material } = solicitacao;
       const baixa = await tx.material.updateMany({
-        where: { id: material.id, ativo: true, quantidade: { gte: quantidade } },
-        data: {
-          quantidade: { decrement: quantidade },
-          quantidadeTotal: { decrement: quantidade * material.fatorConversao },
-        },
+        where: { id: material.id, ativo: true, quantidadeTotal: { gte: quantidade } },
+        data: { quantidadeTotal: { decrement: quantidade } },
       });
       if (baixa.count === 0) {
         const atual = await tx.material.findUnique({ where: { id: material.id } });
         // Lançar o erro desfaz a "reserva" do passo 1 (rollback).
         throw new ErroNegocio(
           400,
-          `Estoque insuficiente. Disponível: ${atual ? atual.quantidade : 0} ${material.unidadeMedida.toLowerCase()}(s).`
+          `Estoque insuficiente. Disponível: ${atual ? formatQuantidade(atual.quantidadeTotal, atual) : '0 un.'}.`
         );
       }
 

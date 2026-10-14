@@ -1,4 +1,14 @@
 const prisma = require('../lib/prisma');
+const { ErroNegocio } = require('../lib/erros');
+const { hojeBrasil } = require('../lib/datas');
+const {
+  INT_MAXIMO,
+  lerQuantidadePositiva,
+  lerEntrada,
+  paraUnidades,
+  exigirFracionamento,
+  formatQuantidade,
+} = require('../lib/quantidade');
 
 // ---------------------------------------------------------------
 // EMPRÉSTIMO DE UNIFORME (aluno -> professor/coordenador/admin)
@@ -31,7 +41,7 @@ const prisma = require('../lib/prisma');
 // ---------------------------------------------------------------
 
 const CATEGORIA_EMPRESTIMO = 'Uniforme';
-const QUANTIDADE_MAXIMA = 20;
+const QUANTIDADE_MAXIMA = 20; // em UNIDADES, por empréstimo
 const TEXTO_MAXIMO = 300;
 // Prazo máximo de um empréstimo, em dias a partir de hoje.
 const PRAZO_MAXIMO_DIAS = 30;
@@ -42,16 +52,6 @@ const MAX_PENDENTES_POR_ALUNO = 5;
 const MAX_DEVOLVIDOS_RECENTES = 30;
 
 const MS_DIA = 24 * 60 * 60 * 1000;
-// Maior número que cabe num campo Int do banco (4 bytes).
-const INT_MAXIMO = 2147483647;
-
-// Erro "esperado" (regra de negócio) com o status HTTP que deve voltar.
-class ErroNegocio extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
 
 function responderErro(res, error, mensagemPadrao) {
   if (error instanceof ErroNegocio) {
@@ -62,21 +62,6 @@ function responderErro(res, error, mensagemPadrao) {
 }
 
 // ---------- datas ----------
-
-// Hoje à meia-noite UTC, mas com o DIA de Brasília. O servidor (ex: Vercel)
-// roda em UTC; sem isso, depois das 21h em Brasília o "hoje" já seria o
-// dia seguinte e o empréstimo apareceria como atrasado cedo demais.
-function hojeBrasil() {
-  const texto = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date()); // "AAAA-MM-DD"
-
-  const [ano, mes, dia] = texto.split('-').map(Number);
-  return new Date(Date.UTC(ano, mes - 1, dia));
-}
 
 // "DD/MM/AAAA" -> Date (meia-noite UTC). Devolve null se não existir no
 // calendário (31/02/2026 é rejeitado).
@@ -109,20 +94,6 @@ function diasAte(data, hoje) {
 }
 
 // ---------- formatação ----------
-
-// "2 caixas (100 un.)" / "5 un." — mesmo formato das outras telas.
-function formatQuantidade(quantidade, material) {
-  const { unidadeMedida, fatorConversao } = material;
-
-  if (unidadeMedida === 'Unidade') {
-    return `${quantidade} un.`;
-  }
-
-  const unidadeLower = unidadeMedida.toLowerCase();
-  const plural = quantidade === 1 ? unidadeLower : `${unidadeLower}s`;
-
-  return `${quantidade} ${plural} (${quantidade * fatorConversao} un.)`;
-}
 
 function parseId(valor) {
   const id = Number(valor);
@@ -191,7 +162,7 @@ async function listMateriaisDisponiveis(req, res) {
     const materiais = await prisma.material.findMany({
       where: {
         ativo: true,
-        quantidade: { gt: 0 },
+        quantidadeTotal: { gt: 0 },
         categoria: CATEGORIA_EMPRESTIMO,
       },
       orderBy: { nome: 'asc' },
@@ -201,7 +172,8 @@ async function listMateriaisDisponiveis(req, res) {
         categoria: true,
         unidadeMedida: true,
         fatorConversao: true,
-        quantidade: true,
+        quantidadeTotal: true,
+        permiteFracionar: true,
       },
     });
 
@@ -217,15 +189,14 @@ async function listMateriaisDisponiveis(req, res) {
 async function criarEmprestimo(req, res) {
   try {
     const materialId = parseId(req.body.materialId);
-    const quantidade = Number(req.body.quantidade);
+    const quantidadeInformada = lerQuantidadePositiva(
+      req.body.quantidade,
+      QUANTIDADE_MAXIMA,
+      'empréstimo'
+    );
+    // Em que unidade o aluno digitou: "embalagem" (padrão) ou "unidade".
+    const entrada = lerEntrada(req.body.unidade);
     const observacao = textoOpcional(req.body.observacao, 'A observação');
-
-    if (!Number.isInteger(quantidade) || quantidade <= 0) {
-      throw new ErroNegocio(400, 'Informe uma quantidade válida, maior que zero.');
-    }
-    if (quantidade > QUANTIDADE_MAXIMA) {
-      throw new ErroNegocio(400, `A quantidade máxima por empréstimo é ${QUANTIDADE_MAXIMA}.`);
-    }
 
     const dataDevolucao = lerDataBR(req.body.dataDevolucao);
     if (!dataDevolucao) {
@@ -249,13 +220,24 @@ async function criarEmprestimo(req, res) {
     if (!material || !material.ativo || material.categoria !== CATEGORIA_EMPRESTIMO) {
       throw new ErroNegocio(404, 'Uniforme não encontrado ou indisponível para empréstimo.');
     }
-    if (material.quantidade <= 0) {
+    exigirFracionamento(entrada, material);
+
+    // O pedido é guardado em UNIDADES.
+    const quantidade = paraUnidades(
+      quantidadeInformada,
+      entrada,
+      material,
+      QUANTIDADE_MAXIMA,
+      'empréstimo'
+    );
+
+    if (material.quantidadeTotal <= 0) {
       throw new ErroNegocio(400, 'Esse uniforme está sem estoque no momento.');
     }
-    if (quantidade > material.quantidade) {
+    if (quantidade > material.quantidadeTotal) {
       throw new ErroNegocio(
         400,
-        `Quantidade indisponível. Disponível: ${material.quantidade} ${material.unidadeMedida.toLowerCase()}(s).`
+        `Quantidade indisponível. Disponível: ${formatQuantidade(material.quantidadeTotal, material)}.`
       );
     }
 
@@ -423,29 +405,22 @@ async function aprovarEmprestimo(req, res) {
 
       // 2) Baixa o estoque só se ainda houver quantidade suficiente. A
       //    condição vale no próprio comando do banco, então dois pedidos
-      //    confirmados juntos nunca passam do estoque.
-      //    quantidadeTotal = quantidade * fatorConversao: baixa os dois na
-      //    mesma proporção.
+      //    confirmados juntos nunca passam do estoque. A quantidade do
+      //    pedido já está em UNIDADES, a mesma do saldo.
       const baixa = await tx.material.updateMany({
         where: {
           id: material.id,
           ativo: true,
-          // se alguém editou o fator de conversão agora há pouco, o cálculo
-          // ficou velho — melhor recusar do que gravar errado
-          fatorConversao: material.fatorConversao,
-          quantidade: { gte: quantidade },
+          quantidadeTotal: { gte: quantidade },
         },
-        data: {
-          quantidade: { decrement: quantidade },
-          quantidadeTotal: { decrement: quantidade * material.fatorConversao },
-        },
+        data: { quantidadeTotal: { decrement: quantidade } },
       });
       if (baixa.count === 0) {
         const atual = await tx.material.findUnique({ where: { id: material.id } });
         // Lançar o erro desfaz a "reserva" do passo 1 (rollback).
         throw new ErroNegocio(
           409,
-          `Estoque insuficiente ou alterado agora há pouco. Disponível: ${atual ? atual.quantidade : 0} ${material.unidadeMedida.toLowerCase()}(s).`
+          `Estoque insuficiente ou alterado agora há pouco. Disponível: ${atual ? formatQuantidade(atual.quantidadeTotal, atual) : '0 un.'}.`
         );
       }
 
@@ -524,27 +499,19 @@ async function devolverEmprestimo(req, res) {
 
       // 2) Devolve ao estoque. Não exige material ativo: se ele foi
       //    inativado enquanto estava emprestado, o uniforme voltou do mesmo
-      //    jeito. Usa o fator de conversão ATUAL do material.
+      //    jeito.
       const { quantidade, materialId } = emprestimo;
       const material = await tx.material.findUnique({ where: { id: materialId } });
       if (!material) throw new ErroNegocio(404, 'Material não encontrado.');
 
-      if ((material.quantidade + quantidade) * material.fatorConversao > INT_MAXIMO) {
-        throw new ErroNegocio(400, 'Essa devolução deixaria o total em estoque grande demais.');
-      }
-
+      // A quantidade do empréstimo já está em UNIDADES, a mesma do saldo.
+      // A condição no updateMany vale mesmo com outra pessoa mexendo.
       const alterado = await tx.material.updateMany({
-        where: { id: materialId, fatorConversao: material.fatorConversao },
-        data: {
-          quantidade: { increment: quantidade },
-          quantidadeTotal: { increment: quantidade * material.fatorConversao },
-        },
+        where: { id: materialId, quantidadeTotal: { lte: INT_MAXIMO - quantidade } },
+        data: { quantidadeTotal: { increment: quantidade } },
       });
       if (alterado.count === 0) {
-        throw new ErroNegocio(
-          409,
-          'Esse material foi alterado por outra pessoa agora há pouco. Atualize a lista e tente de novo.'
-        );
+        throw new ErroNegocio(400, 'Essa devolução deixaria o total em estoque grande demais.');
       }
 
       // 3) Registra a devolução em Movimentações, em nome de quem recebeu.

@@ -9,8 +9,9 @@
 //   updateMaterial(token, id, dados)        -> { material: {...} }
 //   setMaterialActive(token, id, bool)      -> { material: {...} }
 //   deleteMaterial(token, id)               -> null
-//   retirarMaterial(token, id, quantidade)  -> { material, movimentacao }
-//   devolverMaterial(token, id, quantidade) -> { material, movimentacao }
+//   retirarMaterial(token, id, quantidade, unidade)  -> { material, movimentacao }
+//   devolverMaterial(token, id, quantidade, unidade) -> { material, movimentacao }
+//     (unidade: "embalagem" = ex: caixas, padrão | "unidade" = avulsas)
 //
 // MODELO DE QUANTIDADE POR UNIDADE DE MEDIDA
 // -------------------------------------------
@@ -18,12 +19,14 @@
 //   - unidadeMedida:   "Unidade", "Caixa", "Pacote" ou um nome customizado
 //   - fatorConversao:  quantas unidades individuais tem em 1 "unidadeMedida"
 //                       (ex: 1 caixa = 50 unidades -> fatorConversao = 50)
-//   - quantidade:      quantas "unidadeMedida" existem em estoque
-//                       (ex: 4 caixas -> quantidade = 4)
-//   - quantidadeTotal: quantidade * fatorConversao, calculado pelo backend.
+//   - quantidadeTotal: o saldo, SEMPRE em unidades (a fonte da verdade);
+//   - quantidade:      embalagens FECHADAS (ex: 3 caixas), calculado pelo backend;
+//   - unidadesAvulsas: o que sobra sem completar uma embalagem (ex: 12 un.);
+//   - quantidadeTexto: texto pronto, ex: "3 caixas e 12 un. (162 un.)".
 //
-// "Retirar" e "colocar de volta" mexem na "quantidade" (na mesma unidade
-// mostrada na tela — ex: caixas), não direto no total em unidades.
+// "Retirar" e "adicionar" aceitam a quantidade em embalagens OU em unidades
+// avulsas (parâmetro "unidade"), então dá para retirar 1 unidade de um item
+// que vem em caixa. O saldo e o histórico são gravados em unidades.
 
 import { API_URL } from "./api";
 
@@ -106,21 +109,21 @@ export async function deleteMaterial(token, id) {
 }
 
 // Retirar item do estoque: admin, coordenador e professor.
-export async function retirarMaterial(token, id, quantidade) {
+export async function retirarMaterial(token, id, quantidade, unidade = "embalagem") {
   const response = await fetch(`${API_URL}/materiais/${id}/retirar`, {
     method: "POST",
     headers: authHeaders(token),
-    body: JSON.stringify({ quantidade }),
+    body: JSON.stringify({ quantidade, unidade }),
   });
   return parseResponse(response);
 }
 
 // Adicionar item ao estoque: admin, coordenador e professor.
-export async function devolverMaterial(token, id, quantidade) {
+export async function devolverMaterial(token, id, quantidade, unidade = "embalagem") {
   const response = await fetch(`${API_URL}/materiais/${id}/devolver`, {
     method: "POST",
     headers: authHeaders(token),
-    body: JSON.stringify({ quantidade }),
+    body: JSON.stringify({ quantidade, unidade }),
   });
   return parseResponse(response);
 }

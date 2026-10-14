@@ -35,6 +35,38 @@ export async function registerUser(name, email, password) {
   return parseResponse(response); // { user }
 }
 
+// Chamada protegida (PATCH com o token) sobre a PRÓPRIA conta.
+async function patchAutenticado(caminho, token, corpo) {
+  let response;
+  try {
+    response = await fetch(`${API_URL}${caminho}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(corpo),
+    });
+  } catch (networkError) {
+    throw new Error(
+      "Não foi possível conectar ao servidor. Verifique se o backend está rodando."
+    );
+  }
+
+  return parseResponse(response);
+}
+
+// Perfil: troca o nome da própria conta. Devolve { user }.
+export function updateProfile(token, { name }) {
+  return patchAutenticado("/auth/me", token, { name });
+}
+
+// Perfil: troca a própria senha (exige a senha atual). Devolve { ok: true }.
+// Depois da troca, os logins antigos caem — inclusive o atual.
+export function changeOwnPassword(token, { senhaAtual, password }) {
+  return patchAutenticado("/auth/me/senha", token, { senhaAtual, password });
+}
+
 // Login: chama POST /auth/login, que busca o usuário no banco de dados,
 // compara a senha com bcrypt.compare e devolve um token JWT.
 export async function loginUser(email, password) {

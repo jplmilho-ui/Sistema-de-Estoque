@@ -53,11 +53,12 @@ export async function listMinhasSolicitacoes(token) {
   return parseResponse(response);
 }
 
-export async function criarSolicitacao(token, { materialId, quantidade, observacao }) {
+// unidade: "embalagem" (ex: caixas, padrão) ou "unidade" (avulsas).
+export async function criarSolicitacao(token, { materialId, quantidade, unidade = "embalagem", observacao }) {
   const response = await fetch(`${API_URL}/solicitacoes`, {
     method: "POST",
     headers: authHeaders(token),
-    body: JSON.stringify({ materialId, quantidade, observacao }),
+    body: JSON.stringify({ materialId, quantidade, unidade, observacao }),
   });
   return parseResponse(response);
 }

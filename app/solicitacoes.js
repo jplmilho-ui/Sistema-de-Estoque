@@ -33,6 +33,13 @@ import { CartaoEmprestimoAluno } from "../components/emprestimoComum";
 import { confirmAction } from "../utils/confirmAction";
 import { getSession } from "../services/authStorage";
 import {
+  ROTULO_POR_UNIDADE,
+  paraUnidades,
+  rotuloPorEmbalagem,
+  temEmbalagem,
+  textoQuantidade,
+} from "../utils/quantidade";
+import {
   listMateriaisDisponiveis,
   listMinhasSolicitacoes,
   criarSolicitacao,
@@ -112,6 +119,8 @@ export default function Solicitacoes() {
   const [loadingMateriais, setLoadingMateriais] = useState(false);
   const [materialId, setMaterialId] = useState(null);
   const [quantidade, setQuantidade] = useState("");
+  // Em que unidade o aluno digita: "embalagem" (ex: caixas) ou "unidade".
+  const [unidadeEntrada, setUnidadeEntrada] = useState("embalagem");
   const [observacao, setObservacao] = useState("");
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -222,6 +231,7 @@ export default function Solicitacoes() {
   function resetForm() {
     setMaterialId(null);
     setQuantidade("");
+    setUnidadeEntrada("embalagem");
     setObservacao("");
     setModo("solicitar");
     setDataTexto("");
@@ -252,12 +262,29 @@ export default function Solicitacoes() {
   const materialSelecionado =
     materiaisVisiveis.find((m) => m.id === materialId) || null;
 
-  const disponivelParaEmprestimo = materialSelecionado?.quantidade || 0;
+  // Saldo disponível, sempre em UNIDADES.
+  const disponivelEmUnidades = materialSelecionado?.quantidadeTotal || 0;
+
+  // Item que vem em caixa/pacote: o aluno só escolhe entre embalagem e
+  // unidade se o material permitir (permiteFracionar). Se não
+  // permitir, o pedido é sempre por embalagem fechada.
+  const materialComEmbalagem = !!materialSelecionado && temEmbalagem(materialSelecionado);
+  const podeEscolherUnidade =
+    materialComEmbalagem && materialSelecionado.permiteFracionar !== false;
+  const entradaEfetiva = podeEscolherUnidade ? unidadeEntrada : "embalagem";
+
+  // Rótulo do campo de quantidade: "caixa(s)" (embalagem fechada) ou "unidades".
+  const rotuloUnidade = !materialSelecionado
+    ? ""
+    : materialComEmbalagem && entradaEfetiva === "embalagem"
+    ? `${materialSelecionado.unidadeMedida.toLowerCase()}(s)`
+    : "unidades";
 
   function trocarModo(novoModo) {
     if (novoModo === modo) return;
     setModo(novoModo);
     setMaterialId(null); // a lista muda: a escolha anterior não vale mais
+    setUnidadeEntrada("embalagem");
     setFormError("");
   }
   async function handleSubmit() {
@@ -278,13 +305,16 @@ export default function Solicitacoes() {
       return;
     }
 
+    // Tudo é comparado em UNIDADES (o servidor confere de novo).
+    const unidadesPedidas = paraUnidades(qtd, entradaEfetiva, materialSelecionado);
+    if (unidadesPedidas > disponivelEmUnidades) {
+      setFormError(
+        `Quantidade indisponível. Disponível: ${textoQuantidade(disponivelEmUnidades, materialSelecionado)}.`
+      );
+      return;
+    }
+
     if (emprestando) {
-      if (qtd > disponivelParaEmprestimo) {
-        setFormError(
-          `Quantidade indisponível. Disponível: ${disponivelParaEmprestimo} ${materialSelecionado.unidadeMedida.toLowerCase()}(s).`
-        );
-        return;
-      }
       const erroData = validarDataDevolucao(dataTexto, prazoMaximo);
       if (erroData) {
         setFormError(erroData);
@@ -296,6 +326,7 @@ export default function Solicitacoes() {
         const { emprestimo } = await criarEmprestimo(session.token, {
           materialId: materialSelecionado.id,
           quantidade: qtd,
+          unidade: entradaEfetiva,
           dataDevolucao: dataTexto,
           observacao: observacao.trim() || undefined,
         });
@@ -317,6 +348,7 @@ export default function Solicitacoes() {
       await criarSolicitacao(session.token, {
         materialId: materialSelecionado.id,
         quantidade: qtd,
+        unidade: entradaEfetiva,
         observacao: observacao.trim() || undefined,
       });
 
@@ -544,7 +576,11 @@ export default function Solicitacoes() {
                       <TouchableOpacity
                         key={material.id}
                         style={[styles.materialOption, ativo && styles.materialOptionActive]}
-                        onPress={() => setMaterialId(material.id)}
+                        onPress={() => {
+                          setMaterialId(material.id);
+                          setUnidadeEntrada("embalagem");
+                          if (formError) setFormError("");
+                        }}
                       >
                         <Text
                           style={[styles.materialName, ativo && styles.materialNameActive]}
@@ -559,13 +595,34 @@ export default function Solicitacoes() {
               )}
             </View>
 
+            {podeEscolherUnidade && (
+              <>
+                <Text style={styles.fieldLabel}>Pedir por</Text>
+                <View style={styles.chipRow}>
+                  {[
+                    { key: "embalagem", label: rotuloPorEmbalagem(materialSelecionado) },
+                    { key: "unidade", label: ROTULO_POR_UNIDADE },
+                  ].map((opcao) => {
+                    const ativo = unidadeEntrada === opcao.key;
+                    return (
+                      <TouchableOpacity
+                        key={opcao.key}
+                        style={[styles.chip, ativo && styles.chipActive]}
+                        onPress={() => setUnidadeEntrada(opcao.key)}
+                        disabled={saving}
+                      >
+                        <Text style={[styles.chipText, ativo && styles.chipTextActive]}>
+                          {opcao.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
             <Text style={styles.fieldLabel}>
-              Quantidade
-              {materialSelecionado
-                ? ` (em ${materialSelecionado.unidadeMedida.toLowerCase()}${
-                    materialSelecionado.unidadeMedida === "Unidade" ? "s" : "(s)"
-                  })`
-                : ""}
+              Quantidade{rotuloUnidade ? ` (em ${rotuloUnidade})` : ""}
             </Text>
             <TextInput
               style={styles.input}
@@ -576,6 +633,14 @@ export default function Solicitacoes() {
               maxLength={QUANTIDADE_MAX_DIGITOS}
               editable={!saving}
             />
+            {!!materialSelecionado && (
+              <Text style={styles.fieldHelp}>
+                Disponível: {textoQuantidade(disponivelEmUnidades, materialSelecionado)}.
+                {materialComEmbalagem && !podeEscolherUnidade
+                  ? " Este item só é entregue por embalagem fechada."
+                  : ""}
+              </Text>
+            )}
 
             {emprestando && (
               <>

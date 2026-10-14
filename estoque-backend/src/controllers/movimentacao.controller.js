@@ -1,23 +1,6 @@
 const prisma = require('../lib/prisma');
-const { formatDataHoraBR } = require('./material.controller');
-
-// Monta o texto de quantidade do jeito que a tela mostra, ex:
-// "2 caixas (100 un.)" ou "5 un." — usando a unidade do material
-// associado a essa movimentação específica.
-function formatQuantidade(movimentacao) {
-  const { unidadeMedida, fatorConversao } = movimentacao.material;
-  const qtd = movimentacao.quantidade;
-
-  if (unidadeMedida === 'Unidade') {
-    return `${qtd} un.`;
-  }
-
-  const unidadeLower = unidadeMedida.toLowerCase();
-  const plural = qtd === 1 ? unidadeLower : `${unidadeLower}s`;
-  const total = qtd * fatorConversao;
-
-  return `${qtd} ${plural} (${total} un.)`;
-}
+const { formatDataHoraBR } = require('../lib/datas');
+const { formatQuantidade } = require('../lib/quantidade');
 
 async function listMovimentacoes(req, res) {
   try {
@@ -31,8 +14,12 @@ async function listMovimentacoes(req, res) {
         id: mov.id,
         materialNome: mov.material.nome,
         tipo: mov.tipo,
-        quantidade: formatQuantidade(mov),
+        quantidade: formatQuantidade(mov.quantidade, mov.material),
+        quantidadeUnidades: mov.quantidade,
+        // Texto no horário de Brasília (para exibir) e o instante exato em ISO
+        // (para calcular "há 5 min" certo em qualquer fuso do aparelho).
         data: formatDataHoraBR(mov.createdAt),
+        dataISO: mov.createdAt.toISOString(),
         responsavel: mov.responsavel.name,
       })),
     });

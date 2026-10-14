@@ -31,18 +31,9 @@ const PAPEL_LABEL = {
   aluno: "Aluno(a)",
 };
 
-// "2 caixas (100 un.)" / "5 un." — mesmo texto da coluna Quantidade do Estoque.
-export function textoQuantidade(quantidade, material) {
-  const { unidadeMedida, fatorConversao } = material;
-
-  if (!unidadeMedida || unidadeMedida === "Unidade") {
-    return `${quantidade} un.`;
-  }
-
-  const unidadeLower = unidadeMedida.toLowerCase();
-  const plural = quantidade === 1 ? unidadeLower : `${unidadeLower}s`;
-  return `${quantidade} ${plural} (${quantidade * (fatorConversao || 1)} un.)`;
-}
+// Texto da quantidade ("5 un.", "2 caixas (100 un.)", "3 caixas e 12 un. (162 un.)").
+// Recebe a quantidade em UNIDADES. Fica aqui só para não quebrar quem já importa daqui.
+export { textoQuantidade } from "./quantidade";
 
 // Monta o PDF e devolve { doc, nomeArquivo }.
 //

@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../lib/prisma');
 
 const SENHA_MINIMA = 8;
+const SENHA_MAXIMA = 72; // limite do bcrypt: o que passa disso seria ignorado em silêncio
 const EMAIL_MINIMO = 8;
 const RM_MAXIMO = 5; // o RM do aluno tem no máximo 5 caracteres
 // Checagem simples de formato (algo@algo.algo) — não cobre todo caso
@@ -18,10 +19,25 @@ function validarEmail(email) {
   return null;
 }
 
+// Campos de usuário que podem ir para o app (nunca o hash da senha).
+const USER_PUBLICO = {
+  id: true,
+  name: true,
+  email: true,
+  role: true,
+  rm: true,
+  ativo: true,
+  createdAt: true,
+};
+
+// Papéis que um coordenador NÃO alcança (desativar, redefinir senha,
+// excluir): só o admin mexe em coordenador e admin.
+const PAPEIS_FORA_DO_ALCANCE_DO_COORDENADOR = ['coordenador', 'admin'];
+
 async function listUsers(req, res) {
   try {
     const users = await prisma.user.findMany({
-      select: { id: true, name: true, email: true, role: true, rm: true, createdAt: true },
+      select: USER_PUBLICO,
       orderBy: { createdAt: 'asc' },
     });
 
@@ -138,7 +154,7 @@ async function deleteUser(req, res) {
     // admin tem esse alcance. Sem essa checagem, um coordenador qualquer
     // conseguia remover até o admin, o que não faz sentido dentro da
     // hierarquia (admin -> coordenador -> professor -> aluno).
-    if (req.userRole === 'coordenador' && ['coordenador', 'admin'].includes(existingUser.role)) {
+    if (req.userRole === 'coordenador' && PAPEIS_FORA_DO_ALCANCE_DO_COORDENADOR.includes(existingUser.role)) {
       return res.status(403).json({
         error: 'Um coordenador não pode excluir outro coordenador ou o admin.',
       });
@@ -166,4 +182,129 @@ async function deleteUser(req, res) {
   }
 }
 
-module.exports = { listUsers, createUser, deleteUser };
+// ---------------------------------------------------------------
+// DESATIVAR / REATIVAR
+//
+// Conta desativada não entra no sistema e perde a sessão na hora (o
+// authMiddleware confere "ativo" no banco a cada requisição), mas o histórico
+// dela continua intacto. É o caminho certo para quem saiu da escola e não
+// pode ser excluído por já ter registros em seu nome.
+// ---------------------------------------------------------------
+async function setUserActive(req, res) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Id inválido.' });
+    }
+
+    // Só aceita true/false de verdade (nada de "false" em texto virar true).
+    const ativo = req.body?.ativo;
+    if (typeof ativo !== 'boolean') {
+      return res.status(400).json({ error: 'Informe "ativo" como verdadeiro ou falso.' });
+    }
+
+    if (id === req.userId) {
+      return res.status(400).json({
+        error: 'Você não pode desativar a própria conta enquanto está logado nela.',
+      });
+    }
+
+    const alvo = await prisma.user.findUnique({ where: { id } });
+    if (!alvo) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    if (
+      req.userRole === 'coordenador' &&
+      PAPEIS_FORA_DO_ALCANCE_DO_COORDENADOR.includes(alvo.role)
+    ) {
+      return res.status(403).json({
+        error: 'Um coordenador não pode desativar outro coordenador ou o admin.',
+      });
+    }
+
+    const user = await prisma.user.update({
+      where: { id },
+      // tokensValidosDesde: derruba sessões antigas. Assim, reativar a conta
+      // não "ressuscita" um login velho que ficou guardado em algum aparelho.
+      data: { ativo, tokensValidosDesde: new Date() },
+      select: USER_PUBLICO,
+    });
+
+    return res.json({ user });
+  } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+    console.error(error);
+    return res.status(500).json({ error: 'Erro ao atualizar a conta.' });
+  }
+}
+
+// ---------------------------------------------------------------
+// REDEFINIR SENHA
+//
+// - Admin redefine a de qualquer pessoa; coordenador, a de professor e aluno.
+// - Cada pessoa também pode trocar a PRÓPRIA senha por aqui, mas nesse caso
+//   precisa informar a senha atual (um login esquecido aberto não basta).
+// - Depois da troca, logins antigos da conta deixam de valer.
+// ---------------------------------------------------------------
+async function resetUserPassword(req, res) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Id inválido.' });
+    }
+
+    const { password } = req.body || {};
+
+    if (typeof password !== 'string' || password.length < SENHA_MINIMA) {
+      return res.status(400).json({
+        error: `A nova senha precisa ter pelo menos ${SENHA_MINIMA} caracteres.`,
+      });
+    }
+    if (password.length > SENHA_MAXIMA) {
+      return res.status(400).json({
+        error: `A nova senha pode ter no máximo ${SENHA_MAXIMA} caracteres.`,
+      });
+    }
+
+    if (id === req.userId) {
+      return res.status(400).json({
+        error: 'Para trocar a sua própria senha, use o seu perfil (ícone no canto superior direito).',
+      });
+    }
+
+    const alvo = await prisma.user.findUnique({ where: { id } });
+    if (!alvo) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    if (
+      req.userRole === 'coordenador' &&
+      PAPEIS_FORA_DO_ALCANCE_DO_COORDENADOR.includes(alvo.role)
+    ) {
+      return res.status(403).json({
+        error: 'Um coordenador não pode redefinir a senha de outro coordenador ou do admin.',
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword, tokensValidosDesde: new Date() },
+      select: USER_PUBLICO,
+    });
+
+    return res.json({ user });
+  } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+    console.error(error);
+    return res.status(500).json({ error: 'Erro ao redefinir a senha.' });
+  }
+}
+
+module.exports = { listUsers, createUser, deleteUser, setUserActive, resetUserPassword };

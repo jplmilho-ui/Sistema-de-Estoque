@@ -7,6 +7,7 @@ import TabelaRolavel from "../components/TabelaRolavel";
 import PageHeader from "../components/PageHeader";
 import SearchBox from "../components/SearchBox";
 import { getSession } from "../services/authStorage";
+import { dividirEmbalagens, temEmbalagem, textoQuantidade } from "../utils/quantidade";
 
 import {
   listMaterials,
@@ -72,6 +73,8 @@ export default function Materiais() {
   // estoque chega a esse valor ou menos, a tela de Estoque avisa
   // "Estoque baixo". Vazio ou 0 = sem alerta.
   const [estoqueMinimo, setEstoqueMinimo] = useState("");
+  // O aluno pode pedir por unidade (sem levar a embalagem toda)?
+  const [permiteFracionar, setPermiteFracionar] = useState(true);
 
   const [validade, setValidade] = useState("");
   const [ca, setCa] = useState("");
@@ -166,6 +169,7 @@ export default function Materiais() {
     setFatorConversao("1");
     setQuantidade("");
     setEstoqueMinimo("");
+    setPermiteFracionar(true);
     setValidade("");
     setCa("");
     setFormError("");
@@ -188,7 +192,10 @@ export default function Materiais() {
     }
 
     setFatorConversao(String(material.fatorConversao));
-    setQuantidade(String(material.quantidade));
+    // O saldo NÃO é editado aqui: use Adicionar/Retirar na tela de Estoque
+    // (assim fica registrado e não apaga o que outra pessoa fez).
+    setQuantidade("");
+    setPermiteFracionar(material.permiteFracionar !== false);
     setEstoqueMinimo(material.estoqueMinimo ? String(material.estoqueMinimo) : "");
     setValidade(material.validade || "");
     setCa(material.ca || "");
@@ -208,12 +215,9 @@ export default function Materiais() {
       return "Informe a unidade de medida.";
     }
 
-    if (
-      !quantidade.trim() ||
-      Number.isNaN(Number(quantidade)) ||
-      Number(quantidade) < 0
-    ) {
-      return "Quantidade precisa ser um número válido.";
+    // O saldo só é informado ao cadastrar; ao editar ele não muda.
+    if (!editingId && !/^\d+$/.test(quantidade.trim())) {
+      return "Quantidade precisa ser um número inteiro (0 ou mais).";
     }
 
     if (
@@ -224,12 +228,8 @@ export default function Materiais() {
     }
 
     if (unidadeMedida !== "Unidade") {
-      if (
-        !fatorConversao.trim() ||
-        Number.isNaN(Number(fatorConversao)) ||
-        Number(fatorConversao) <= 0
-      ) {
-        return `Informe quantas unidades tem em cada ${unidade.toLowerCase()}.`;
+      if (!/^\d+$/.test(fatorConversao.trim()) || Number(fatorConversao) < 1) {
+        return `Informe quantas unidades tem em cada ${unidade.toLowerCase()} (número inteiro, 1 ou mais).`;
       }
     }
 
@@ -274,11 +274,17 @@ export default function Materiais() {
         categoria,
         unidadeMedida: unidadeFinal(),
         fatorConversao,
-        quantidade,
         estoqueMinimo: estoqueMinimo.trim() || "0",
+        permiteFracionar,
         validade,
         ca,
       };
+
+      // O saldo só é enviado ao cadastrar. Na edição ele fica de fora de
+      // propósito: mudar o estoque é com Adicionar/Retirar (tela de Estoque).
+      if (!editingId) {
+        payload.quantidade = quantidade;
+      }
 
       if (editingId) {
         // RF006 - Editar material
@@ -353,25 +359,26 @@ export default function Materiais() {
     }
   }
 
-  // Formata a coluna de quantidade da tabela.
-  // Ex: unidadeMedida "Caixa" -> principal "4 caixas", detalhe "= 200 un."
-  //     unidadeMedida "Unidade" -> principal "15 un.", sem detalhe
+  // Formata a coluna de quantidade da tabela. O saldo vem em unidades.
+  // Ex: Caixa de 50, 162 un. -> principal "3 caixas e 12 un.", detalhe "= 162 un."
+  //     Unidade, 15 un.      -> principal "15 un.", sem detalhe
   function formatQuantidade(material) {
-    const { unidadeMedida: unidade, quantidade: qtd, quantidadeTotal } =
-      material;
+    const total = material.quantidadeTotal;
 
-    if (unidade === "Unidade") {
-      return { principal: `${qtd} un.`, detalhe: null };
+    if (!temEmbalagem(material)) {
+      return { principal: `${total} un.`, detalhe: null };
     }
+
+    const { embalagens, avulsas } = dividirEmbalagens(total, material.fatorConversao);
 
     // Pluralização simples (não cobre casos irregulares em português,
     // mas funciona bem para "caixa/caixas", "pacote/pacotes" etc.)
-    const unidadeLower = unidade.toLowerCase();
-    const plural = qtd === 1 ? unidadeLower : `${unidadeLower}s`;
+    const nome = material.unidadeMedida.toLowerCase();
+    const plural = embalagens === 1 ? nome : `${nome}s`;
 
     return {
-      principal: `${qtd} ${plural}`,
-      detalhe: `= ${quantidadeTotal} un.`,
+      principal: avulsas > 0 ? `${embalagens} ${plural} e ${avulsas} un.` : `${embalagens} ${plural}`,
+      detalhe: `= ${total} un.`,
     };
   }
 
@@ -534,25 +541,78 @@ export default function Materiais() {
               />
             )}
 
-            <TextInput
-              style={styles.input}
-              placeholder={
-                unidadeMedida === "Unidade"
-                  ? "Quantidade (em unidades)"
-                  : `Quantidade de ${
-                      (unidadeSelecionada || "embalagens").toLowerCase()
-                    }s em estoque`
-              }
-              value={quantidade}
-              onChangeText={setQuantidade}
-              keyboardType="numeric"
-              editable={!saving}
-            />
+            {editingId ? (
+              // Na edição o saldo não é alterado aqui (evita apagar, sem
+              // querer, retiradas feitas enquanto o formulário estava aberto).
+              <Text style={styles.helperText}>
+                Em estoque agora:{" "}
+                {textoQuantidade(
+                  materials.find((m) => m.id === editingId)?.quantidadeTotal ?? 0,
+                  materials.find((m) => m.id === editingId) || {}
+                )}
+                . Para alterar o estoque, use Adicionar ou Retirar item na tela de
+                Estoque.
+              </Text>
+            ) : (
+              <>
+                <TextInput
+                  style={styles.input}
+                  placeholder={
+                    unidadeMedida === "Unidade"
+                      ? "Quantidade (em unidades)"
+                      : `Quantidade de ${
+                          (unidadeSelecionada || "embalagens").toLowerCase()
+                        }s em estoque`
+                  }
+                  value={quantidade}
+                  onChangeText={setQuantidade}
+                  keyboardType="numeric"
+                  editable={!saving}
+                />
+
+                {unidadeMedida !== "Unidade" && (
+                  <Text style={styles.helperText}>
+                    Total em estoque: {totalCalculado} unidades
+                  </Text>
+                )}
+              </>
+            )}
 
             {unidadeMedida !== "Unidade" && (
-              <Text style={styles.helperText}>
-                Total em estoque: {totalCalculado} unidades
-              </Text>
+              <>
+                <Text style={styles.fieldLabel}>
+                  O aluno pode pedir por unidade (sem levar a embalagem toda)?
+                </Text>
+                <View style={styles.toggleRow}>
+                  {[
+                    { valor: true, texto: "Sim" },
+                    { valor: false, texto: "Não, só embalagem fechada" },
+                  ].map((opt) => (
+                    <TouchableOpacity
+                      key={opt.texto}
+                      style={[
+                        styles.toggleOption,
+                        permiteFracionar === opt.valor && styles.toggleOptionActive,
+                      ]}
+                      onPress={() => setPermiteFracionar(opt.valor)}
+                      disabled={saving}
+                    >
+                      <Text
+                        style={[
+                          styles.toggleOptionText,
+                          permiteFracionar === opt.valor && styles.toggleOptionTextActive,
+                        ]}
+                      >
+                        {opt.texto}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.helperText}>
+                  Desative para itens que não podem ser abertos (ex: material
+                  estéril ou kits). A equipe sempre pode retirar por unidade.
+                </Text>
+              </>
             )}
 
             <TextInput
@@ -610,7 +670,7 @@ export default function Materiais() {
 
         {/* LISTA DE MATERIAIS */}
 
-        <TabelaRolavel larguraMinima={900}>
+        <TabelaRolavel larguraMinima={950}>
         <View style={styles.listCard}>
           <View style={[styles.row, styles.rowHeader]}>
             <Text style={[styles.cell, styles.cellNome, styles.headerText]}>

@@ -4,10 +4,12 @@
 // Materiais) e a quantidade atual chegou nele ou ficou abaixo.
 // Mínimo 0 (ou vazio) significa "sem alerta" — não é uma decisão visual,
 // vem sempre do valor cadastrado pelo admin/coordenador.
-// "quantidade" e "estoqueMinimo" estão na mesma unidade (ex: caixas).
+// O estoque mínimo é em EMBALAGENS (ex: 3 caixas); o saldo é em unidades.
+// Compara tudo em unidades: quantidadeTotal <= mínimo x unidades por embalagem.
 export function isEstoqueBaixo(material) {
   const minimo = Number(material?.estoqueMinimo) || 0;
-  return minimo > 0 && material.quantidade <= minimo;
+  const fator = Number(material?.fatorConversao) || 1;
+  return minimo > 0 && material.quantidadeTotal <= minimo * fator;
 }
 
 // Texto do aviso, ex: "Estoque baixo (mínimo: 3 caixa(s))".

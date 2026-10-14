@@ -56,11 +56,12 @@ export async function listMeusEmprestimos(token) {
 }
 
 // dataDevolucao no formato "DD/MM/AAAA".
-export async function criarEmprestimo(token, { materialId, quantidade, dataDevolucao, observacao }) {
+// unidade: "embalagem" (ex: caixas, padrão) ou "unidade" (avulsas).
+export async function criarEmprestimo(token, { materialId, quantidade, unidade = "embalagem", dataDevolucao, observacao }) {
   const response = await fetch(`${API_URL}/emprestimos`, {
     method: "POST",
     headers: authHeaders(token),
-    body: JSON.stringify({ materialId, quantidade, dataDevolucao, observacao }),
+    body: JSON.stringify({ materialId, quantidade, unidade, dataDevolucao, observacao }),
   });
   return parseResponse(response);
 }

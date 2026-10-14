@@ -18,6 +18,7 @@ import { router, usePathname } from "expo-router";
 import { clearSession, getSession } from "../services/authStorage";
 import Icon from "./Icon";
 import NotificationsPopup from "./NotificationsPopup";
+import ProfilePopup from "./ProfilePopup";
 import useNotificacoes from "./useNotificacoes";
 import useLayout from "./useLayout";
 
@@ -79,8 +80,13 @@ export default function AppBar({ children }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notifications = useNotificacoes(auth);
 
+  // Pop-up do perfil (ícone de pessoa): trocar nome e senha.
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [user, setUser] = useState(null);
+
   useEffect(() => {
     getSession().then(({ token, user }) => {
+      setUser(user ?? null);
       setRole(user?.role ?? null);
       setAuth({ token, userId: user?.id ?? null, role: user?.role ?? null });
     });
@@ -183,7 +189,13 @@ export default function AppBar({ children }) {
               </View>
             )}
           </TouchableOpacity>
-          <View style={styles.avatar} />
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => setProfileOpen(true)}
+            accessibilityLabel="Meu perfil"
+          >
+            <Icon name="user" size={26} color="#ffffff" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -203,6 +215,14 @@ export default function AppBar({ children }) {
         onRespond={role === "aluno" ? undefined : notifications.responderSolicitacao}
         respondendoId={notifications.respondendoId}
         errosAcao={notifications.errosAcao}
+      />
+
+      <ProfilePopup
+        visible={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        token={auth.token}
+        user={user}
+        onUserChange={setUser}
       />
 
       {/* Gaveta do menu (só em telas estreitas) */}
@@ -332,12 +352,6 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 12,
     fontWeight: "700",
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#1a1a1a",
   },
   body: {
     flex: 1,

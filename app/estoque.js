@@ -28,7 +28,14 @@ import { isVencido } from "../utils/validade";
 import { isEstoqueBaixo, textoEstoqueBaixo } from "../utils/estoque";
 import TabelaRolavel from "../components/TabelaRolavel";
 import EmprestimosEquipe from "../components/EmprestimosEquipe";
-import { gerarPdfRetirada, textoQuantidade } from "../utils/retiradaPdf";
+import { gerarPdfRetirada } from "../utils/retiradaPdf";
+import {
+  ROTULO_POR_UNIDADE,
+  paraUnidades,
+  rotuloPorEmbalagem,
+  temEmbalagem,
+  textoQuantidade,
+} from "../utils/quantidade";
 import { baixarPdf } from "../utils/pdfBase";
 
 // Papéis que podem ver e movimentar o Estoque. Diferente da tela de
@@ -60,21 +67,15 @@ const FILTROS_CATEGORIA = [
   { key: "Uniforme", label: "Uniforme" },
 ];
 
-// Monta o texto exibido na coluna "Quantidade", ex: "4 caixas (200 un.)"
-// ou "15 un." quando a unidade de medida já é "Unidade".
+// Monta o texto exibido na coluna "Quantidade", ex: "4 caixas (200 un.)",
+// "3 caixas e 12 un. (162 un.)" ou "15 un." quando não há embalagem.
 function cellValue(material, key) {
   switch (key) {
     case "nome":
       return material.nome;
-    case "quantidade": {
-      const { unidadeMedida, quantidade, quantidadeTotal } = material;
-      if (unidadeMedida === "Unidade") {
-        return `${quantidade} un.`;
-      }
-      const unidadeLower = unidadeMedida.toLowerCase();
-      const plural = quantidade === 1 ? unidadeLower : `${unidadeLower}s`;
-      return `${quantidade} ${plural} (${quantidadeTotal} un.)`;
-    }
+    case "quantidade":
+      // ex: "3 caixas e 12 un. (162 un.)" — o saldo vem em unidades
+      return textoQuantidade(material.quantidadeTotal, material);
     case "validade":
       return material.validade || "—";
     case "categoria":
@@ -138,6 +139,8 @@ export default function Estoque() {
   const [movement, setMovement] = useState(null);
   const [movementQuantidade, setMovementQuantidade] = useState("");
   const [movementError, setMovementError] = useState("");
+  // Em que unidade a quantidade é digitada: "embalagem" (ex: caixas) ou "unidade".
+  const [movementUnidade, setMovementUnidade] = useState("embalagem");
   const [movementSaving, setMovementSaving] = useState(false);
 
   // TERMO DE RETIRADA (PDF pra assinar): guarda o que foi retirado nesta
@@ -303,6 +306,7 @@ export default function Estoque() {
         { header: "Categoria", key: "categoria", numerica: false },
         { header: "Quantidade", key: "quantidade", numerica: true },
         { header: "Unidade de medida", key: "unidadeMedida", numerica: false },
+        { header: "Unidades soltas", key: "avulsas", numerica: true },
         { header: "Total (un.)", key: "total", numerica: true },
         { header: "Validade", key: "validade", numerica: false },
         { header: "C.A.", key: "ca", numerica: false },
@@ -313,6 +317,7 @@ export default function Estoque() {
         categoria: material.categoria,
         quantidade: material.quantidade,
         unidadeMedida: material.unidadeMedida,
+        avulsas: material.unidadesAvulsas ?? 0,
         total: material.quantidadeTotal,
         validade: material.validade || "—",
         ca: material.ca || "—",
@@ -443,6 +448,7 @@ export default function Estoque() {
     }
     setMovement({ tipo });
     setMovementQuantidade("");
+    setMovementUnidade("embalagem");
     setMovementError("");
   }
 
@@ -478,10 +484,21 @@ export default function Estoque() {
       return;
     }
 
-    // Avisa antes de ir ao servidor (o backend confere de novo).
-    if (movement.tipo === "retirar" && quantidade > selectedMaterial.quantidade) {
+    // Tudo é convertido para UNIDADES (é assim que o saldo é guardado).
+    const entrada = temEmbalagem(selectedMaterial) ? movementUnidade : "embalagem";
+    const unidades = paraUnidades(quantidade, entrada, selectedMaterial);
+
+    if (unidades > MOVIMENTACAO_QUANTIDADE_MAXIMA) {
       setMovementError(
-        `Estoque insuficiente. Disponível: ${selectedMaterial.quantidade} ${selectedMaterial.unidadeMedida.toLowerCase()}(s).`
+        `A quantidade máxima por operação é ${MOVIMENTACAO_QUANTIDADE_MAXIMA} unidades.`
+      );
+      return;
+    }
+
+    // Avisa antes de ir ao servidor (o backend confere de novo).
+    if (movement.tipo === "retirar" && unidades > selectedMaterial.quantidadeTotal) {
+      setMovementError(
+        `Estoque insuficiente. Disponível: ${textoQuantidade(selectedMaterial.quantidadeTotal, selectedMaterial)}.`
       );
       return;
     }
@@ -491,8 +508,8 @@ export default function Estoque() {
     try {
       const response =
         movement.tipo === "retirar"
-          ? await retirarMaterial(session.token, selectedMaterial.id, quantidade)
-          : await devolverMaterial(session.token, selectedMaterial.id, quantidade);
+          ? await retirarMaterial(session.token, selectedMaterial.id, quantidade, entrada)
+          : await devolverMaterial(session.token, selectedMaterial.id, quantidade, entrada);
 
       // Atualiza só esse material na lista, sem recarregar tudo.
       setMaterials((current) =>
@@ -506,7 +523,7 @@ export default function Estoque() {
           nome: selectedMaterial.nome,
           categoria: selectedMaterial.categoria,
           ca: selectedMaterial.ca,
-          quantidadeTexto: textoQuantidade(quantidade, selectedMaterial),
+          quantidadeTexto: textoQuantidade(unidades, selectedMaterial),
           quando: new Date(),
         };
         setRetiradasTermo((atual) => [...atual, itemRetirado]);
@@ -568,6 +585,10 @@ export default function Estoque() {
       Alert.alert("Erro", "Não foi possível gerar o termo em PDF.");
     }
   }
+
+  // Unidade efetiva do modal: só há escolha se o material vem em embalagem.
+  const modalTemEmbalagem = !!selectedMaterial && temEmbalagem(selectedMaterial);
+  const entradaModal = modalTemEmbalagem ? movementUnidade : "embalagem";
 
   if (checkingAccess) {
     return null;
@@ -811,19 +832,58 @@ export default function Estoque() {
 
             <Text style={styles.modalMaterialNome}>{selectedMaterial?.nome}</Text>
 
-            {movement?.tipo === "retirar" && selectedMaterial && (
+            {selectedMaterial && (
               <Text style={styles.helperText}>
-                Em estoque: {selectedMaterial.quantidade}{" "}
-                {selectedMaterial.unidadeMedida.toLowerCase()}(s)
+                Em estoque:{" "}
+                {textoQuantidade(selectedMaterial.quantidadeTotal, selectedMaterial)}
               </Text>
+            )}
+
+            {/* Item que vem em caixa/pacote: escolhe se a quantidade é em
+                embalagens fechadas ou em unidades soltas. */}
+            {modalTemEmbalagem && (
+              <View style={styles.unidadeRow}>
+                {[
+                  { key: "embalagem", label: rotuloPorEmbalagem(selectedMaterial) },
+                  { key: "unidade", label: ROTULO_POR_UNIDADE },
+                ].map((opcao) => {
+                  const ativa = movementUnidade === opcao.key;
+                  return (
+                    <TouchableOpacity
+                      key={opcao.key}
+                      style={[
+                        styles.categoriaChip,
+                        styles.unidadeChip,
+                        ativa && styles.categoriaChipActive,
+                      ]}
+                      onPress={() => {
+                        setMovementUnidade(opcao.key);
+                        if (movementError) setMovementError("");
+                      }}
+                      disabled={movementSaving}
+                    >
+                      <Text
+                        style={[
+                          styles.categoriaChipText,
+                          ativa && styles.categoriaChipTextActive,
+                        ]}
+                      >
+                        {opcao.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             )}
 
             <TextInput
               style={styles.input}
               placeholder={
-                selectedMaterial
-                  ? `Quantidade de ${selectedMaterial.unidadeMedida.toLowerCase()}(s)`
-                  : "Quantidade"
+                !selectedMaterial
+                  ? "Quantidade"
+                  : entradaModal === "unidade"
+                  ? "Quantidade de unidades"
+                  : `Quantidade de ${selectedMaterial.unidadeMedida.toLowerCase()}(s)`
               }
               value={movementQuantidade}
               onChangeText={(texto) => {
@@ -837,6 +897,16 @@ export default function Estoque() {
               onSubmitEditing={handleConfirmMovement}
               autoFocus
             />
+
+            {modalTemEmbalagem &&
+              entradaModal === "embalagem" &&
+              /^\d+$/.test(movementQuantidade) && (
+                <Text style={styles.helperText}>
+                  Equivale a{" "}
+                  {paraUnidades(Number(movementQuantidade), "embalagem", selectedMaterial)}{" "}
+                  unidades.
+                </Text>
+              )}
 
             {!!movementError && <Text style={styles.errorText}>{movementError}</Text>}
 
@@ -999,6 +1069,16 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 24,
     paddingTop: 12,
+  },
+  // escolha "Por caixa | Por unidade" no modal de adicionar/retirar
+  unidadeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  unidadeChip: {
+    paddingRight: 14,
   },
   categoriaLabel: {
     fontSize: 15,

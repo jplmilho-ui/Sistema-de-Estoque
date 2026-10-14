@@ -113,8 +113,8 @@ export default function Login() {
           disabled={loading}
           onPress={() =>
             Alert.alert(
-              'Em breve',
-              'A recuperação de senha ainda não foi implementada.'
+              'Esqueceu a senha?',
+              'Procure a coordenação da escola: ela pode redefinir a sua senha.'
             )
           }
         >

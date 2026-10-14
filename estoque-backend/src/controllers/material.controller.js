@@ -1,4 +1,14 @@
 const prisma = require('../lib/prisma');
+const { ErroNegocio } = require('../lib/erros');
+const { hojeBrasil, formatDataHoraBR } = require('../lib/datas');
+const {
+  INT_MAXIMO,
+  lerQuantidadePositiva,
+  lerEntrada,
+  paraUnidades,
+  formatQuantidade,
+  descreverEstoque,
+} = require('../lib/quantidade');
 
 // ---------------------------------------------------------------
 // Datas: o front-end trabalha com validade no formato "dd/mm/aaaa"
@@ -25,67 +35,91 @@ function formatDataBR(data) {
   return `${dia}/${mes}/${ano}`;
 }
 
-function formatDataHoraBR(data) {
-  const d = new Date(data);
-  const dia = String(d.getDate()).padStart(2, '0');
-  const mes = String(d.getMonth() + 1).padStart(2, '0');
-  const ano = d.getFullYear();
-  const hora = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  return `${dia}/${mes}/${ano} ${hora}:${min}`;
-}
-
 // Devolve o material no formato que o app espera (validade como texto).
+// O saldo vem do banco em unidades (quantidadeTotal); aqui acrescentamos
+// as embalagens fechadas (quantidade), as unidades avulsas e o texto pronto.
 function serializeMaterial(material) {
-  return { ...material, validade: formatDataBR(material.validade) };
+  return {
+    ...material,
+    validade: formatDataBR(material.validade),
+    ...descreverEstoque(material),
+  };
 }
 
 // Recebe os dados crus do formulário e devolve um objeto pronto pra
-// salvar no banco, com os números já calculados. Nunca confiamos em
-// "quantidadeTotal" vindo do front-end — ela é sempre recalculada aqui.
-function normalizePayload(body) {
+// salvar no banco.
+//
+// SALDO: só é definido na CRIAÇÃO (quantidade informada em embalagens x
+// fator = unidades). Na EDIÇÃO o saldo não é tocado: quem muda o estoque
+// é Adicionar/Retirar na tela de Estoque, que registra a movimentação e
+// não sobrescreve o que outra pessoa fez nesse meio tempo. Se o fator de
+// conversão for corrigido na edição, o total em UNIDADES continua o mesmo.
+function lerBooleano(valor) {
+  if (valor === undefined || valor === null || valor === '') return undefined;
+  return valor === true || valor === 'true';
+}
+
+function normalizePayload(body, { criando = false } = {}) {
   const unidadeMedida = (body.unidadeMedida || '').trim() || 'Unidade';
 
   // Se a unidade for "Unidade", não faz sentido ter fator de conversão.
   const fatorConversao =
     unidadeMedida === 'Unidade' ? 1 : Number(body.fatorConversao) || 1;
 
-  const quantidade = Number(body.quantidade) || 0;
-
   // Vazio/ausente = 0 (sem alerta de estoque baixo). A validação já
   // garantiu que, se veio preenchido, é um inteiro válido.
   const estoqueMinimo = Number(body.estoqueMinimo) || 0;
 
-  return {
+  const data = {
     nome: (body.nome || '').trim(),
     categoria: body.categoria,
     unidadeMedida,
     fatorConversao,
-    quantidade,
-    quantidadeTotal: quantidade * fatorConversao,
     estoqueMinimo,
+    permiteFracionar: lerBooleano(body.permiteFracionar),
     validade: parseDataBR(body.validade),
     ca: body.ca?.trim() || null,
   };
+
+  if (criando) {
+    data.quantidadeTotal = Number(body.quantidade) * fatorConversao;
+  }
+
+  return data;
 }
 
 const ESTOQUE_MINIMO_MAXIMO = 1000000;
+const FATOR_MAXIMO = 1000000;
 
-function validatePayload(body) {
+function validatePayload(body, { criando = false } = {}) {
   if (!body.nome || !body.nome.trim()) {
     return 'Informe o nome do material.';
   }
   if (!body.categoria) {
     return 'Informe a categoria do material.';
   }
-  if (
-    body.quantidade === undefined ||
-    body.quantidade === null ||
-    body.quantidade === '' ||
-    Number.isNaN(Number(body.quantidade)) ||
-    Number(body.quantidade) < 0
-  ) {
-    return 'Quantidade precisa ser um número válido.';
+
+  // Fator de conversão: quantas unidades cabem em 1 embalagem. Precisa ser
+  // inteiro >= 1 (nada de 0,5, de negativo ou de texto).
+  const unidade = String(body.unidadeMedida ?? '').trim() || 'Unidade';
+  let fator = 1;
+  if (unidade !== 'Unidade') {
+    const textoFator = String(body.fatorConversao ?? '').trim();
+    if (!/^\d+$/.test(textoFator) || Number(textoFator) < 1 || Number(textoFator) > FATOR_MAXIMO) {
+      return `Informe quantas unidades tem em cada embalagem: um número inteiro de 1 a ${FATOR_MAXIMO}.`;
+    }
+    fator = Number(textoFator);
+  }
+
+  // O saldo só é informado na criação (na edição ele não muda).
+  if (criando) {
+    const textoQtd = String(body.quantidade ?? '').trim();
+    if (!/^\d+$/.test(textoQtd)) {
+      return 'Quantidade precisa ser um número inteiro (0 ou mais).';
+    }
+    if (Number(textoQtd) * fator > INT_MAXIMO) {
+      return 'Quantidade grande demais. Confira o número digitado.';
+    }
   }
 
   // Estoque mínimo é opcional (vazio = sem alerta), mas se vier
@@ -154,12 +188,12 @@ async function listMaterials(req, res) {
 
 async function createMaterial(req, res) {
   try {
-    const validationError = validatePayload(req.body);
+    const validationError = validatePayload(req.body, { criando: true });
     if (validationError) {
       return res.status(400).json({ error: validationError });
     }
 
-    const data = normalizePayload(req.body);
+    const data = normalizePayload(req.body, { criando: true });
 
     const material = await prisma.material.create({
       data: { ...data, criadoPorId: req.userId },
@@ -268,105 +302,74 @@ async function deleteMaterial(req, res) {
 //   pessoas retirando ao mesmo tempo nunca passam do que existe em
 //   estoque, e uma devolução nunca apaga a outra (o saldo é
 //   incrementado/decrementado, não sobrescrito com um valor lido antes).
+//
+//   A quantidade pode ser digitada em EMBALAGENS (ex: 1 caixa) ou em
+//   UNIDADES AVULSAS (ex: 1 un.): o campo "unidade" do corpo diz qual.
+//   O saldo e a movimentação são sempre gravados em unidades.
 // ---------------------------------------------------------------
 
-// Maior número que cabe num campo Int do banco (4 bytes).
-const INT_MAXIMO = 2147483647;
-
-// Teto por operação: segura digitação errada (ex: um "0" a mais) e
-// evita estourar o campo Int do banco.
+// Teto por operação, em UNIDADES: segura digitação errada (ex: um "0" a
+// mais) e evita estourar o campo Int do banco.
 const MOVIMENTACAO_QUANTIDADE_MAXIMA = 1000000;
 
-// Erro "esperado" (regra de negócio) com o status HTTP que deve voltar.
-class ErroMovimentacao extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-
-// Aceita só número inteiro maior que zero. Recusa decimal ("2.5"),
-// notação científica ("1e3"), texto, vazio e negativo.
-function lerQuantidadeMovimentacao(valor) {
-  const texto = String(valor ?? '').trim();
-
-  if (!/^\d+$/.test(texto) || Number(texto) <= 0) {
-    throw new ErroMovimentacao(
-      400,
-      'Informe uma quantidade válida: um número inteiro maior que zero.'
-    );
-  }
-
-  const quantidade = Number(texto);
-  if (quantidade > MOVIMENTACAO_QUANTIDADE_MAXIMA) {
-    throw new ErroMovimentacao(
-      400,
-      `A quantidade máxima por operação é ${MOVIMENTACAO_QUANTIDADE_MAXIMA}.`
-    );
-  }
-
-  return quantidade;
-}
-
 function erroEstoqueInsuficiente(material) {
-  return new ErroMovimentacao(
+  return new ErroNegocio(
     400,
-    `Estoque insuficiente. Disponível: ${material.quantidade} ${material.unidadeMedida.toLowerCase()}(s).`
+    `Estoque insuficiente. Disponível: ${formatQuantidade(material.quantidadeTotal, material)}.`
   );
 }
 
 // tipo: 'saida' (retirar) ou 'entrada' (devolver/adicionar).
-// Devolve { materialAtualizado, movimentacao } ou lança ErroMovimentacao.
-async function movimentarEstoque({ id, quantidade, tipo, responsavelId }) {
+// `entrada`: em que unidade a pessoa digitou — 'embalagem' (ex: caixas) ou
+// 'unidade' (avulsas). Tudo é convertido para UNIDADES aqui dentro.
+// Devolve { materialAtualizado, movimentacao } ou lança ErroNegocio.
+async function movimentarEstoque({ id, quantidade, entrada, tipo, responsavelId }) {
   const saida = tipo === 'saida';
 
   return prisma.$transaction(async (tx) => {
     const material = await tx.material.findUnique({ where: { id } });
 
     if (!material) {
-      throw new ErroMovimentacao(404, 'Material não encontrado.');
+      throw new ErroNegocio(404, 'Material não encontrado.');
     }
     if (!material.ativo) {
-      throw new ErroMovimentacao(400, 'Esse material está inativo.');
+      throw new ErroNegocio(400, 'Esse material está inativo.');
     }
+
+    const unidades = paraUnidades(
+      quantidade,
+      entrada,
+      material,
+      MOVIMENTACAO_QUANTIDADE_MAXIMA,
+      'operação'
+    );
 
     // Mensagem clara logo de cara (a trava de verdade é a condição do
     // updateMany logo abaixo, que vale mesmo com outra pessoa mexendo).
-    if (saida && material.quantidade < quantidade) {
+    if (saida && material.quantidadeTotal < unidades) {
       throw erroEstoqueInsuficiente(material);
     }
-    if (
-      !saida &&
-      (material.quantidade + quantidade) * material.fatorConversao > INT_MAXIMO
-    ) {
-      throw new ErroMovimentacao(
+    if (!saida && material.quantidadeTotal + unidades > INT_MAXIMO) {
+      throw new ErroNegocio(
         400,
         'Essa quantidade deixaria o total em estoque grande demais. Confira o número digitado.'
       );
     }
 
-    // quantidadeTotal = quantidade * fatorConversao, então os dois
-    // mudam na mesma proporção.
-    const total = quantidade * material.fatorConversao;
-
     const alterado = await tx.material.updateMany({
       where: {
         id,
         ativo: true,
-        // se alguém editou o fator de conversão agora há pouco, o
-        // cálculo acima ficou velho — melhor recusar do que gravar errado
+        // se alguém corrigiu o fator de conversão agora há pouco, a
+        // conversão acima ficou velha — melhor recusar do que gravar errado
         fatorConversao: material.fatorConversao,
-        ...(saida ? { quantidade: { gte: quantidade } } : {}),
+        quantidadeTotal: saida
+          ? { gte: unidades }
+          : { lte: INT_MAXIMO - unidades },
       },
-      data: saida
-        ? {
-            quantidade: { decrement: quantidade },
-            quantidadeTotal: { decrement: total },
-          }
-        : {
-            quantidade: { increment: quantidade },
-            quantidadeTotal: { increment: total },
-          },
+      data: {
+        quantidadeTotal: saida ? { decrement: unidades } : { increment: unidades },
+      },
     });
 
     if (alterado.count === 0) {
@@ -375,22 +378,23 @@ async function movimentarEstoque({ id, quantidade, tipo, responsavelId }) {
       const atual = await tx.material.findUnique({ where: { id } });
 
       if (!atual) {
-        throw new ErroMovimentacao(404, 'Material não encontrado.');
+        throw new ErroNegocio(404, 'Material não encontrado.');
       }
       if (!atual.ativo) {
-        throw new ErroMovimentacao(400, 'Esse material está inativo.');
+        throw new ErroNegocio(400, 'Esse material está inativo.');
       }
-      if (saida && atual.quantidade < quantidade) {
+      if (saida && atual.quantidadeTotal < unidades) {
         throw erroEstoqueInsuficiente(atual);
       }
-      throw new ErroMovimentacao(
+      throw new ErroNegocio(
         409,
         'Esse material foi alterado por outra pessoa agora há pouco. Atualize a lista e tente de novo.'
       );
     }
 
+    // A movimentação é gravada em UNIDADES.
     const movimentacao = await tx.movimentacao.create({
-      data: { tipo, quantidade, materialId: id, responsavelId },
+      data: { tipo, quantidade: unidades, materialId: id, responsavelId },
     });
 
     const materialAtualizado = await tx.material.findUnique({ where: { id } });
@@ -404,21 +408,26 @@ function criarHandlerMovimentacao(tipo, mensagemErro) {
     try {
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0) {
-        throw new ErroMovimentacao(400, 'Id inválido.');
+        throw new ErroNegocio(400, 'Id inválido.');
       }
 
-      const quantidade = lerQuantidadeMovimentacao(req.body?.quantidade);
+      const quantidade = lerQuantidadePositiva(
+        req.body?.quantidade,
+        MOVIMENTACAO_QUANTIDADE_MAXIMA
+      );
+      const entrada = lerEntrada(req.body?.unidade);
 
       const { materialAtualizado, movimentacao } = await movimentarEstoque({
         id,
         quantidade,
+        entrada,
         tipo,
         responsavelId: req.userId,
       });
 
       return res.json({ material: serializeMaterial(materialAtualizado), movimentacao });
     } catch (error) {
-      if (error instanceof ErroMovimentacao) {
+      if (error instanceof ErroNegocio) {
         return res.status(error.status).json({ error: error.message });
       }
       console.error(error);
@@ -453,8 +462,9 @@ const devolver = criarHandlerMovimentacao('entrada', 'Erro ao devolver material.
 
 async function resumo(req, res) {
   try {
-    const hoje = new Date();
-    hoje.setUTCHours(0, 0, 0, 0);
+    // "Hoje" no dia de Brasília (o servidor roda em UTC; sem isso, depois
+    // das 21h o "hoje" já seria o dia seguinte).
+    const hoje = hojeBrasil();
 
     const em30Dias = new Date(hoje);
     em30Dias.setUTCDate(em30Dias.getUTCDate() + 30);

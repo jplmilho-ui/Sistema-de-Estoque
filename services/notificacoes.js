@@ -151,7 +151,7 @@ function montarAlertas(materials) {
       }
     }
 
-    if (material.quantidade <= 0) {
+    if (material.quantidadeTotal <= 0) {
       semEstoque.push({
         ordem: 0,
         item: {
@@ -186,7 +186,11 @@ function montarMovimentacoes(movimentacoes) {
       tipo,
       title: `${mov.materialNome}`,
       message: `${mov.responsavel} ${verbo} ${mov.quantidade}.`,
-      timeLabel: tempoRelativo(parseDataHoraBR(mov.data)) || mov.data,
+      // dataISO = instante exato (certo em qualquer fuso). O texto "DD/MM/AAAA
+      // HH:mm" fica só como reserva, caso o servidor ainda não mande dataISO.
+      timeLabel:
+        tempoRelativo(mov.dataISO ? new Date(mov.dataISO) : parseDataHoraBR(mov.data)) ||
+        mov.data,
       href: "/movimentacoes",
     };
   });

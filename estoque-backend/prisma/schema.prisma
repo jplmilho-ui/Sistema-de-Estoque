@@ -46,6 +46,15 @@ model User {
 
   createdAt DateTime @default(now())
 
+  // Conta desativada não consegue entrar (nem continuar logada), mas o
+  // histórico dela (movimentações, aprovações...) é preservado.
+  ativo Boolean @default(true)
+
+  // Tokens (logins) emitidos ANTES desta data deixam de valer. Preenchido
+  // quando a senha é redefinida e quando a conta é desativada/reativada,
+  // para encerrar sessões antigas na hora.
+  tokensValidosDesde DateTime?
+
   materiaisCriados         Material[]
   movimentacoesRegistradas Movimentacao[]
 
@@ -67,14 +76,21 @@ model Material {
   nome            String
   categoria       String    // "EPI" | "Uniforme" | "Outro"
   unidadeMedida   String    // "Unidade" | "Caixa" | "Pacote" ou nome customizado
-  fatorConversao  Int       @default(1)
-  quantidade      Int       @default(0)
+  fatorConversao  Int       @default(1) // unidades dentro de 1 "unidadeMedida"
+
+  // FONTE DA VERDADE do estoque, SEMPRE em unidades. A API deriva daqui
+  // "embalagens fechadas" e "unidades avulsas" (ver src/lib/quantidade.js),
+  // então é possível retirar 1 unidade de um item que vem em caixa.
   quantidadeTotal Int       @default(0)
 
-  // Estoque mínimo, na mesma unidade de "quantidade" (ex: caixas).
-  // Quando quantidade <= estoqueMinimo, a tela de Estoque destaca o item
-  // como "Estoque baixo". 0 = sem alerta (padrão, e o valor de todos os
-  // materiais que já existiam antes deste campo).
+  // O aluno pode pedir unidade avulsa de um item que vem em embalagem?
+  // (Desligue para material estéril, kits fechados etc.) A equipe sempre
+  // pode movimentar por unidade.
+  permiteFracionar Boolean  @default(true)
+
+  // Estoque mínimo, em EMBALAGENS (a mesma "unidadeMedida", ex: caixas).
+  // Quando quantidadeTotal <= estoqueMinimo * fatorConversao, a tela de
+  // Estoque destaca o item como "Estoque baixo". 0 = sem alerta.
   estoqueMinimo   Int       @default(0)
   validade        DateTime? @db.Date
   ca              String?
@@ -109,7 +125,7 @@ enum TipoMovimentacao {
 model Movimentacao {
   id         Int              @id @default(autoincrement())
   tipo       TipoMovimentacao
-  quantidade Int
+  quantidade Int              // em UNIDADES
 
   materialId Int
   // Restrict: não deixa excluir um Material que já tem movimentações
@@ -148,7 +164,7 @@ enum StatusSolicitacao {
 
 model Solicitacao {
   id         Int               @id @default(autoincrement())
-  quantidade Int               // na mesma unidade de medida do material (ex: caixas)
+  quantidade Int               // em UNIDADES
   observacao String?
   status     StatusSolicitacao @default(pendente)
 
@@ -207,7 +223,7 @@ enum StatusEmprestimo {
 
 model Emprestimo {
   id         Int              @id @default(autoincrement())
-  quantidade Int              // na mesma unidade de medida do material
+  quantidade Int              // em UNIDADES
   observacao String?
   status     StatusEmprestimo @default(pendente)
 
