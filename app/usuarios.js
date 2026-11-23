@@ -504,9 +504,11 @@ export default function Usuarios() {
 
             <TouchableOpacity
               style={styles.newButton}
-
+              accessibilityRole="button"
+              accessibilityLabel={formOpen ? "Cancelar criação de usuário" : "Novo usuário"}
+              accessibilityHint="Abre ou fecha o formulário para cadastrar um novo usuário"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               onPress={() => {
-
                 // Abre ou fecha o formulário
                 setFormOpen((open) => !open);
 
@@ -534,13 +536,14 @@ export default function Usuarios() {
 
 
         {formOpen && (
-
-          <View style={styles.formCard}>
-
-            <Text style={styles.formTitle}>
+          <View style={styles.formCard} accessible={false}>
+            <Text
+              style={styles.formTitle}
+              accessibilityRole="header"
+              aria-level={2}
+            >
               Novo usuário
             </Text>
-
 
             <TextInput
               style={styles.input}
@@ -548,9 +551,12 @@ export default function Usuarios() {
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
+              autoComplete="name"
               editable={!saving}
+              accessible={true}
+              accessibilityLabel="Nome completo"
+              accessibilityHint="Digite o nome completo do novo usuário"
             />
-
 
             <TextInput
               style={styles.input}
@@ -559,9 +565,13 @@ export default function Usuarios() {
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
+              autoComplete="email"
+              textContentType="emailAddress"
               editable={!saving}
+              accessible={true}
+              accessibilityLabel="E-mail"
+              accessibilityHint="Digite o endereço de e-mail de acesso do usuário"
             />
-
 
             <TextInput
               style={styles.input}
@@ -569,9 +579,12 @@ export default function Usuarios() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry
+              autoComplete="new-password"
               editable={!saving}
+              accessible={true}
+              accessibilityLabel="Senha"
+              accessibilityHint="Digite uma senha com no mínimo 8 caracteres"
             />
-
 
             <TextInput
               style={styles.input}
@@ -579,13 +592,20 @@ export default function Usuarios() {
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
+              autoComplete="new-password"
               editable={!saving}
+              accessible={true}
+              accessibilityLabel="Confirmar senha"
+              accessibilityHint="Repita a senha digitada anteriormente"
             />
 
+            <Text style={styles.roleLabel} nativeID="tipoContaLabel">Tipo de conta</Text>
 
-            <Text style={styles.roleLabel}>Tipo de conta</Text>
-
-            <View style={styles.roleToggle}>
+            <View
+              style={styles.roleToggle}
+              accessibilityRole="radiogroup"
+              aria-labelledby="tipoContaLabel"
+            >
               {roleOptions.map((option) => (
                 <TouchableOpacity
                   key={option.value}
@@ -595,6 +615,10 @@ export default function Usuarios() {
                   ]}
                   onPress={() => setNewUserRole(option.value)}
                   disabled={saving}
+                  accessibilityRole="radio"
+                  accessibilityLabel={`Tipo: ${option.label}`}
+                  accessibilityState={{ selected: newUserRole === option.value }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
                   <Text
                     style={[
@@ -616,16 +640,21 @@ export default function Usuarios() {
                 onChangeText={setRm}
                 maxLength={RM_MAXIMO}
                 editable={!saving}
+                accessible={true}
+                accessibilityLabel="RM do aluno"
+                accessibilityHint={`Digite o registro de matrícula do aluno com até ${RM_MAXIMO} caracteres`}
               />
             )}
 
-
             {!!formError && (
-              <Text style={styles.errorText}>
+              <Text
+                style={styles.errorText}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
                 {formError}
               </Text>
             )}
-
 
             <TouchableOpacity
               style={[
@@ -634,25 +663,22 @@ export default function Usuarios() {
               ]}
               onPress={handleCreateUser}
               disabled={saving}
+              accessibilityRole="button"
+              accessibilityLabel={saving ? "Salvando usuário..." : "Salvar usuário"}
+              accessibilityHint="Cadastra o novo usuário no sistema"
+              accessibilityState={{ busy: saving, disabled: saving }}
             >
-
               {saving ? (
-
-                <ActivityIndicator color="#ffffff" />
-
+                <ActivityIndicator color="#ffffff" accessibilityLabel="Salvando..." />
               ) : (
-
                 <Text style={styles.saveButtonText}>
                   Salvar usuário
                 </Text>
-
               )}
-
             </TouchableOpacity>
 
           </View>
         )}
-
 
         {/* Filtro por tipo de conta */}
         <View style={styles.tipoRow}>
@@ -664,6 +690,11 @@ export default function Usuarios() {
                 key={opcao.key}
                 style={[styles.tipoChip, ativo && styles.tipoChipActive]}
                 onPress={() => setTipoFiltro(opcao.key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: ativo }}
+                accessibilityLabel={`Filtro tipo: ${opcao.label}`}
+                accessibilityHint="Filtra a lista de usuários pelo tipo selecionado"
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Text
                   style={[styles.tipoChipText, ativo && styles.tipoChipTextActive]}
@@ -675,7 +706,11 @@ export default function Usuarios() {
           })}
 
           {!loadingUsers && !listError && users.length > 0 && (
-            <Text style={styles.contagemText}>
+            <Text
+              style={styles.contagemText}
+              accessibilityRole="summary"
+              accessibilityLiveRegion="polite"
+            >
               {temFiltroAtivo
                 ? `${filteredUsers.length} de ${users.length} usuários`
                 : `${users.length} ${users.length === 1 ? "usuário" : "usuários"}`}
@@ -752,46 +787,40 @@ export default function Usuarios() {
 
           {/* Carregando usuários */}
           {loadingUsers && (
-
             <View style={styles.centerBox}>
-              <ActivityIndicator />
+              <ActivityIndicator accessibilityLabel="Carregando lista de usuários..." />
             </View>
-
           )}
-
 
           {/* Erro ao carregar */}
           {!loadingUsers && !!listError && (
-
             <View style={styles.centerBox}>
-              <Text style={styles.errorText}>
+              <Text
+                style={styles.errorText}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
                 {listError}
               </Text>
             </View>
-
           )}
-
 
           {/* Lista vazia */}
           {!loadingUsers &&
             !listError &&
             users.length === 0 && (
-
               <View style={styles.centerBox}>
                 <Text style={styles.emptyText}>
                   Nenhum usuário cadastrado ainda.
                 </Text>
               </View>
-
             )}
-
 
           {/* Pesquisa/filtro sem resultado */}
           {!loadingUsers &&
             !listError &&
             users.length > 0 &&
             filteredUsers.length === 0 && (
-
               <View style={styles.centerBox}>
                 <Text style={styles.emptyText}>
                   {searchTerm.trim()
@@ -799,19 +828,15 @@ export default function Usuarios() {
                     : "Nenhum usuário desse tipo."}
                 </Text>
               </View>
-
             )}
-
 
           {/* Usuários */}
           {!loadingUsers &&
             !listError &&
             filteredUsers.map((user) => {
-
               // Verifica se o usuário da linha
               // é o próprio administrador logado.
-              const isSelf =
-                user.id === session?.user?.id;
+              const isSelf = user.id === session?.user?.id;
 
               const semPermissaoParaExcluir =
                 session?.user?.role === "coordenador" &&
@@ -821,14 +846,13 @@ export default function Usuarios() {
               // exclusão (o backend confere). A própria senha é trocada no perfil.
               const podeRedefinirSenha = !isSelf && !semPermissaoParaExcluir;
 
-
               return (
-
                 <View
                   key={user.id}
                   style={styles.row}
+                  accessible={true}
+                  accessibilityLabel={`Usuário ${user.name}, RM: ${user.rm || "não possui"}, Email: ${user.email}, Tipo: ${getRoleInfo(user.role).label}`}
                 >
-
                   {/* Nome */}
                   <Text
                     style={[
@@ -839,7 +863,6 @@ export default function Usuarios() {
                   >
                     {user.name}
                   </Text>
-
 
                   {/* RM (só aluno tem; os demais mostram "—") */}
                   <Text
@@ -852,7 +875,6 @@ export default function Usuarios() {
                     {user.rm || "—"}
                   </Text>
 
-
                   {/* E-mail */}
                   <Text
                     style={[
@@ -864,7 +886,6 @@ export default function Usuarios() {
                     {user.email}
                   </Text>
 
-
                   {/* Tipo */}
                   <View
                     style={[
@@ -872,7 +893,6 @@ export default function Usuarios() {
                       styles.cellRole,
                     ]}
                   >
-
                     <Text
                       style={[
                         styles.roleBadge,
@@ -881,9 +901,7 @@ export default function Usuarios() {
                     >
                       {getRoleInfo(user.role).label}
                     </Text>
-
                   </View>
-
 
                   {/* Ações */}
                   <View
@@ -892,7 +910,6 @@ export default function Usuarios() {
                       styles.cellAction,
                     ]}
                   >
-
                     {/* Redefinir senha */}
                     <TouchableOpacity
                       style={[
@@ -902,6 +919,10 @@ export default function Usuarios() {
                       ]}
                       onPress={() => openResetSenha(user)}
                       disabled={!podeRedefinirSenha}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Redefinir senha de ${user.name}`}
+                      accessibilityHint="Abre o diálogo para redefinir a senha deste usuário"
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
                       <Text style={[styles.acaoButtonText, styles.acaoNeutraText]}>
                         Senha
@@ -912,53 +933,36 @@ export default function Usuarios() {
                     <TouchableOpacity
                       style={[
                         styles.deleteButton,
-
-                        // Desabilita visualmente
-                        // se for o próprio usuário
-                        // ou se não tiver permissão.
-                        (isSelf || semPermissaoParaExcluir) &&
-                          styles.buttonDisabled,
+                        (isSelf || semPermissaoParaExcluir) && styles.buttonDisabled,
                       ]}
-
-                      onPress={() =>
-                        confirmDelete(user)
-                      }
-
-                      // Não permite excluir a própria conta
-                      // nem quem está fora do alcance da hierarquia.
+                      onPress={() => confirmDelete(user)}
                       disabled={
                         isSelf ||
                         semPermissaoParaExcluir ||
                         deletingId === user.id
                       }
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        isSelf
+                          ? "Sua própria conta (não pode ser excluída)"
+                          : `Excluir usuário ${user.name}`
+                      }
+                      accessibilityHint={isSelf ? "" : "Solicita confirmação para excluir este usuário"}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
-
                       {deletingId === user.id ? (
-
-                        // Mostra carregamento enquanto o backend exclui
                         <ActivityIndicator
                           size="small"
-                          color="#ed0000"
+                          color="#c62828"
+                          accessibilityLabel={`Excluindo ${user.name}...`}
                         />
-
                       ) : (
-
-                        <Text
-                          style={
-                            styles.deleteButtonText
-                          }
-                        >
-                          {isSelf
-                            ? "Você"
-                            : "Excluir"}
+                        <Text style={styles.deleteButtonText}>
+                          {isSelf ? "Você" : "Excluir"}
                         </Text>
-
                       )}
-
                     </TouchableOpacity>
-
                   </View>
-
                 </View>
               );
             })}
@@ -974,19 +978,33 @@ export default function Usuarios() {
         transparent
         animationType="fade"
         onRequestClose={closeResetSenha}
+        accessibilityViewIsModal={true}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <View style={styles.modalCard} accessible={false}>
             {senhaConcluida ? (
               <>
-                <Text style={styles.formTitle}>Senha redefinida</Text>
-                <Text style={styles.modalText}>
+                <Text
+                  style={styles.formTitle}
+                  accessibilityRole="header"
+                  aria-level={2}
+                >
+                  Senha redefinida
+                </Text>
+                <Text
+                  style={styles.modalText}
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="polite"
+                >
                   {`A senha de ${senhaConcluida.nome} foi redefinida. Passe a nova senha para a pessoa. Os logins antigos dela foram encerrados.`}
                 </Text>
                 <View style={styles.modalActions}>
                   <TouchableOpacity
                     style={[styles.saveButton, styles.modalSaveButton]}
                     onPress={closeResetSenha}
+                    accessibilityRole="button"
+                    accessibilityLabel="Fechar janela"
+                    accessibilityHint="Fecha este aviso de senha redefinida"
                   >
                     <Text style={styles.saveButtonText}>Fechar</Text>
                   </TouchableOpacity>
@@ -994,8 +1012,16 @@ export default function Usuarios() {
               </>
             ) : (
               <>
-                <Text style={styles.formTitle}>Redefinir senha</Text>
-                <Text style={styles.modalText}>{senhaAlvo?.name}</Text>
+                <Text
+                  style={styles.formTitle}
+                  accessibilityRole="header"
+                  aria-level={2}
+                >
+                  Redefinir senha
+                </Text>
+                <Text style={styles.modalText}>
+                  Usuário: {senhaAlvo?.name}
+                </Text>
 
                 <TextInput
                   style={styles.input}
@@ -1007,7 +1033,11 @@ export default function Usuarios() {
                   }}
                   secureTextEntry
                   autoCapitalize="none"
+                  autoComplete="new-password"
                   editable={!senhaSaving}
+                  accessible={true}
+                  accessibilityLabel="Nova senha"
+                  accessibilityHint={`Digite a nova senha com pelo menos ${SENHA_MINIMA} caracteres`}
                 />
 
                 <TextInput
@@ -1020,17 +1050,33 @@ export default function Usuarios() {
                   }}
                   secureTextEntry
                   autoCapitalize="none"
+                  autoComplete="new-password"
                   editable={!senhaSaving}
                   onSubmitEditing={handleSaveSenha}
+                  accessible={true}
+                  accessibilityLabel="Confirmar nova senha"
+                  accessibilityHint="Digite a mesma nova senha para confirmação"
                 />
 
-                {!!senhaError && <Text style={styles.errorText}>{senhaError}</Text>}
+                {!!senhaError && (
+                  <Text
+                    style={styles.errorText}
+                    accessibilityRole="alert"
+                    accessibilityLiveRegion="assertive"
+                  >
+                    {senhaError}
+                  </Text>
+                )}
 
                 <View style={styles.modalActions}>
                   <TouchableOpacity
                     style={styles.modalCancelButton}
                     onPress={closeResetSenha}
                     disabled={senhaSaving}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancelar redefinição"
+                    accessibilityHint="Descarta as alterações e fecha a janela"
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   >
                     <Text style={styles.modalCancelText}>Cancelar</Text>
                   </TouchableOpacity>
@@ -1043,9 +1089,13 @@ export default function Usuarios() {
                     ]}
                     onPress={handleSaveSenha}
                     disabled={senhaSaving}
+                    accessibilityRole="button"
+                    accessibilityLabel={senhaSaving ? "Salvando nova senha..." : "Salvar nova senha"}
+                    accessibilityHint="Confirma e salva a nova senha para o usuário"
+                    accessibilityState={{ busy: senhaSaving, disabled: senhaSaving }}
                   >
                     {senhaSaving ? (
-                      <ActivityIndicator color="#ffffff" />
+                      <ActivityIndicator color="#ffffff" accessibilityLabel="Salvando..." />
                     ) : (
                       <Text style={styles.saveButtonText}>Salvar senha</Text>
                     )}
@@ -1173,7 +1223,7 @@ const styles = StyleSheet.create({
   },
   contagemText: {
     fontSize: 14,
-    color: "#80868b",
+    color: "#5f6368",
     marginLeft: "auto",
   },
 

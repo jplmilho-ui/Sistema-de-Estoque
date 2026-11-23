@@ -439,6 +439,10 @@ export default function Materiais() {
                 }
                 setFormOpen((open) => !open);
               }}
+              accessibilityRole="button"
+              accessibilityLabel={formOpen ? "Cancelar cadastro de material" : "Novo material"}
+              accessibilityHint="Abre ou fecha o formulário para cadastrar um novo material"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={styles.newButtonText}>
                 {formOpen ? "Cancelar" : "+ Novo material"}
@@ -457,8 +461,12 @@ export default function Materiais() {
         contentContainerStyle={{ paddingBottom: 30 }}
       >
         {formOpen && (
-          <View style={styles.formCard}>
-            <Text style={styles.formTitle}>
+          <View style={styles.formCard} accessible={false}>
+            <Text
+              style={styles.formTitle}
+              accessibilityRole="header"
+              aria-level={2}
+            >
               {editingId ? "Editar material" : "Novo material"}
             </Text>
 
@@ -468,10 +476,17 @@ export default function Materiais() {
               value={nome}
               onChangeText={setNome}
               editable={!saving}
+              accessible={true}
+              accessibilityLabel="Nome do material"
+              accessibilityHint="Digite o nome descritivo do material"
             />
 
-            <Text style={styles.fieldLabel}>Categoria</Text>
-            <View style={styles.toggleRow}>
+            <Text style={styles.fieldLabel} nativeID="categoriaMatLabel">Categoria</Text>
+            <View
+              style={styles.toggleRow}
+              accessibilityRole="radiogroup"
+              aria-labelledby="categoriaMatLabel"
+            >
               {CATEGORIAS.map((opt) => (
                 <TouchableOpacity
                   key={opt}
@@ -481,6 +496,10 @@ export default function Materiais() {
                   ]}
                   onPress={() => setCategoria(opt)}
                   disabled={saving}
+                  accessibilityRole="radio"
+                  accessibilityLabel={`Categoria: ${opt}`}
+                  accessibilityState={{ selected: categoria === opt }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
                   <Text
                     style={[
@@ -494,8 +513,12 @@ export default function Materiais() {
               ))}
             </View>
 
-            <Text style={styles.fieldLabel}>Unidade de medida</Text>
-            <View style={styles.toggleRow}>
+            <Text style={styles.fieldLabel} nativeID="unidadeMedidaLabel">Unidade de medida</Text>
+            <View
+              style={styles.toggleRow}
+              accessibilityRole="radiogroup"
+              aria-labelledby="unidadeMedidaLabel"
+            >
               {UNIDADES.map((opt) => (
                 <TouchableOpacity
                   key={opt}
@@ -505,6 +528,10 @@ export default function Materiais() {
                   ]}
                   onPress={() => setUnidadeMedida(opt)}
                   disabled={saving}
+                  accessibilityRole="radio"
+                  accessibilityLabel={`Unidade: ${opt}`}
+                  accessibilityState={{ selected: unidadeMedida === opt }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
                   <Text
                     style={[
@@ -525,6 +552,9 @@ export default function Materiais() {
                 value={unidadeCustom}
                 onChangeText={setUnidadeCustom}
                 editable={!saving}
+                accessible={true}
+                accessibilityLabel="Nome da unidade personalizada"
+                accessibilityHint="Digite a unidade de medida do material"
               />
             )}
 
@@ -538,6 +568,9 @@ export default function Materiais() {
                 onChangeText={setFatorConversao}
                 keyboardType="numeric"
                 editable={!saving}
+                accessible={true}
+                accessibilityLabel="Fator de conversão"
+                accessibilityHint={`Digite a quantidade de unidades individuais contidas em 1 ${(unidadeSelecionada || "embalagem").toLowerCase()}`}
               />
             )}
 
@@ -568,6 +601,9 @@ export default function Materiais() {
                   onChangeText={setQuantidade}
                   keyboardType="numeric"
                   editable={!saving}
+                  accessible={true}
+                  accessibilityLabel="Quantidade inicial em estoque"
+                  accessibilityHint="Digite a quantidade existente deste item"
                 />
 
                 {unidadeMedida !== "Unidade" && (
@@ -580,10 +616,14 @@ export default function Materiais() {
 
             {unidadeMedida !== "Unidade" && (
               <>
-                <Text style={styles.fieldLabel}>
+                <Text style={styles.fieldLabel} nativeID="fracionarLabel">
                   O aluno pode pedir por unidade (sem levar a embalagem toda)?
                 </Text>
-                <View style={styles.toggleRow}>
+                <View
+                  style={styles.toggleRow}
+                  accessibilityRole="radiogroup"
+                  aria-labelledby="fracionarLabel"
+                >
                   {[
                     { valor: true, texto: "Sim" },
                     { valor: false, texto: "Não, só embalagem fechada" },
@@ -596,6 +636,10 @@ export default function Materiais() {
                       ]}
                       onPress={() => setPermiteFracionar(opt.valor)}
                       disabled={saving}
+                      accessibilityRole="radio"
+                      accessibilityLabel={`Permite fracionar: ${opt.texto}`}
+                      accessibilityState={{ selected: permiteFracionar === opt.valor }}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
                       <Text
                         style={[
@@ -626,6 +670,9 @@ export default function Materiais() {
               onChangeText={(texto) => setEstoqueMinimo(texto.replace(/\D/g, ""))}
               keyboardType="numeric"
               editable={!saving}
+              accessible={true}
+              accessibilityLabel="Estoque mínimo para alerta"
+              accessibilityHint="Quantidade mínima para sinalizar estoque baixo"
             />
             <Text style={styles.helperText}>
               Quando o estoque chegar a esse valor ou menos, o item aparece com
@@ -638,6 +685,9 @@ export default function Materiais() {
               value={validade}
               onChangeText={setValidade}
               editable={!saving}
+              accessible={true}
+              accessibilityLabel="Data de validade"
+              accessibilityHint="Data de validade no formato dia, mês e ano dd/mm/aaaa"
             />
 
             <TextInput
@@ -646,19 +696,38 @@ export default function Materiais() {
               value={ca}
               onChangeText={setCa}
               editable={!saving}
+              accessible={true}
+              accessibilityLabel="Certificado de Aprovação C.A."
+              accessibilityHint="Número do Certificado de Aprovação para equipamentos de proteção individual"
             />
 
             {!!formError && (
-              <Text style={styles.errorText}>{formError}</Text>
+              <Text
+                style={styles.errorText}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
+                {formError}
+              </Text>
             )}
 
             <TouchableOpacity
               style={[styles.saveButton, saving && styles.buttonDisabled]}
               onPress={handleSave}
               disabled={saving}
+              accessibilityRole="button"
+              accessibilityLabel={
+                saving
+                  ? "Salvando..."
+                  : editingId
+                  ? "Salvar alterações no material"
+                  : "Salvar novo material"
+              }
+              accessibilityHint="Salva as informações do material no sistema"
+              accessibilityState={{ busy: saving, disabled: saving }}
             >
               {saving ? (
-                <ActivityIndicator color="#ffffff" />
+                <ActivityIndicator color="#ffffff" accessibilityLabel="Salvando..." />
               ) : (
                 <Text style={styles.saveButtonText}>
                   {editingId ? "Salvar alterações" : "Salvar material"}
@@ -696,13 +765,19 @@ export default function Materiais() {
 
           {loadingList && (
             <View style={styles.centerBox}>
-              <ActivityIndicator />
+              <ActivityIndicator accessibilityLabel="Carregando materiais..." />
             </View>
           )}
 
           {!loadingList && !!listError && (
             <View style={styles.centerBox}>
-              <Text style={styles.errorText}>{listError}</Text>
+              <Text
+                style={styles.errorText}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
+                {listError}
+              </Text>
             </View>
           )}
 
@@ -731,7 +806,12 @@ export default function Materiais() {
               const { principal, detalhe } = formatQuantidade(material);
 
               return (
-                <View key={material.id} style={styles.row}>
+                <View
+                  key={material.id}
+                  style={styles.row}
+                  accessible={true}
+                  accessibilityLabel={`Material: ${material.nome}, Categoria: ${material.categoria}, Quantidade: ${principal}${detalhe ? ` (${detalhe})` : ""}, Validade: ${material.validade || "não informada"}, C.A.: ${material.ca || "não informado"}, Status: ${material.ativo ? "Ativo" : "Inativo"}`}
+                >
                   <Text style={[styles.cell, styles.cellNome]} numberOfLines={1}>
                     {material.nome}
                   </Text>
@@ -783,6 +863,10 @@ export default function Materiais() {
                       <TouchableOpacity
                         style={styles.actionButton}
                         onPress={() => startEdit(material)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Editar material ${material.nome}`}
+                        accessibilityHint="Abre o formulário para editar este material"
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
                         <Text style={styles.actionButtonText}>Editar</Text>
                       </TouchableOpacity>
@@ -793,6 +877,18 @@ export default function Materiais() {
                         style={styles.actionButton}
                         onPress={() => toggleActive(material)}
                         disabled={updatingId === material.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          material.ativo
+                            ? `Inativar material ${material.nome}`
+                            : `Reativar material ${material.nome}`
+                        }
+                        accessibilityHint={
+                          material.ativo
+                            ? "Inativa o material impedindo sua movimentação"
+                            : "Reativa o material para uso"
+                        }
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
                         {updatingId === material.id ? (
                           <ActivityIndicator size="small" color="#5f6368" />
@@ -809,9 +905,13 @@ export default function Materiais() {
                         style={styles.deleteButton}
                         onPress={() => confirmDelete(material)}
                         disabled={deletingId === material.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Excluir material ${material.nome}`}
+                        accessibilityHint="Solicita confirmação para excluir permanentemente este material"
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
                         {deletingId === material.id ? (
-                          <ActivityIndicator size="small" color="#ed0000" />
+                          <ActivityIndicator size="small" color="#c62828" />
                         ) : (
                           <Text style={styles.deleteButtonText}>Excluir</Text>
                         )}

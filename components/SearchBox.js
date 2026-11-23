@@ -11,8 +11,14 @@ export default function SearchBox({ value, onChangeText, placeholder }) {
       <TextInput
         style={styles.searchInput}
         placeholder={placeholder}
+        placeholderTextColor="#5f6368"
         value={value}
         onChangeText={onChangeText}
+        accessible={true}
+        accessibilityLabel={placeholder || "Campo de busca"}
+        accessibilityHint="Digite o termo para filtrar a lista"
+        accessibilityRole="search"
+        returnKeyType="search"
       />
     </View>
   );

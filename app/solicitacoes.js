@@ -424,7 +424,12 @@ export default function Solicitacoes() {
     const info = STATUS_INFO[solicitacao.status] || STATUS_INFO.pendente;
 
     return (
-      <View key={solicitacao.id} style={styles.requestCard}>
+      <View
+        key={solicitacao.id}
+        style={styles.requestCard}
+        accessible={true}
+        accessibilityLabel={`Solicitação de ${solicitacao.materialNome}, quantidade: ${solicitacao.quantidadeTexto}, status: ${info.label}, solicitada em ${formatarDataHora(solicitacao.criadoEm)}${solicitacao.observacao ? `, observação: ${solicitacao.observacao}` : ""}${solicitacao.status === "aprovada" ? `, aprovada por ${solicitacao.respondidoPorNome}` : ""}${solicitacao.status === "recusada" ? `, recusada por ${solicitacao.respondidoPorNome}${solicitacao.motivoRecusa ? `, motivo: ${solicitacao.motivoRecusa}` : ""}` : ""}`}
+      >
         <View style={styles.requestTop}>
           <View style={styles.requestMain}>
             <Text style={styles.requestTitle}>{solicitacao.materialNome}</Text>
@@ -472,6 +477,10 @@ export default function Solicitacoes() {
               style={[styles.cancelButton, cancelingId === solicitacao.id && styles.buttonDisabled]}
               onPress={() => handleCancel(solicitacao)}
               disabled={cancelingId === solicitacao.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Cancelar pedido de ${solicitacao.quantidadeTexto} de ${solicitacao.materialNome}`}
+              accessibilityHint="Cancela esta solicitação pendente"
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <Text style={styles.cancelButtonText}>Cancelar pedido</Text>
             </TouchableOpacity>
@@ -487,7 +496,14 @@ export default function Solicitacoes() {
         title="Solicitações"
         subtitle="Peça EPIs, pegue uniformes emprestados e acompanhe seus pedidos."
         actions={
-          <TouchableOpacity style={styles.newButton} onPress={toggleForm}>
+          <TouchableOpacity
+            style={styles.newButton}
+            onPress={toggleForm}
+            accessibilityRole="button"
+            accessibilityLabel={formOpen ? "Cancelar solicitação" : "Nova solicitação"}
+            accessibilityHint="Abre ou fecha o formulário para fazer um pedido de EPI ou empréstimo de uniforme"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Text style={styles.newButtonText}>
               {formOpen ? "Cancelar" : "Nova solicitação"}
             </Text>
@@ -501,7 +517,11 @@ export default function Solicitacoes() {
       >
         {/* AVISO DE PEDIDO DE EMPRÉSTIMO ENVIADO */}
         {!!criado && (
-          <View style={styles.successCard}>
+          <View
+            style={styles.successCard}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+          >
             <Text style={styles.successTitle}>Pedido de empréstimo enviado</Text>
             <Text style={styles.successText}>
               Seu pedido de {criado.quantidadeTexto} de "{criado.materialNome}" está aguardando a
@@ -510,7 +530,12 @@ export default function Solicitacoes() {
               sino de notificações.
             </Text>
             <View style={styles.successActions}>
-              <TouchableOpacity style={styles.ghostButton} onPress={() => setCriado(null)}>
+              <TouchableOpacity
+                style={styles.ghostButton}
+                onPress={() => setCriado(null)}
+                accessibilityRole="button"
+                accessibilityLabel="Fechar aviso de confirmação"
+              >
                 <Text style={styles.ghostButtonText}>Fechar</Text>
               </TouchableOpacity>
             </View>
@@ -519,16 +544,28 @@ export default function Solicitacoes() {
 
         {/* FORMULÁRIO */}
         {formOpen && (
-          <View style={styles.formCard}>
-            <Text style={styles.formTitle}>
+          <View style={styles.formCard} accessible={false}>
+            <Text
+              style={styles.formTitle}
+              accessibilityRole="header"
+              aria-level={2}
+            >
               {emprestando ? "Pedido de empréstimo de uniforme" : "Solicitação de EPI"}
             </Text>
 
-            <Text style={styles.fieldLabel}>O que você quer fazer?</Text>
-            <View style={styles.chipRow}>
+            <Text style={styles.fieldLabel} nativeID="modoLabel">O que você quer fazer?</Text>
+            <View
+              style={styles.chipRow}
+              accessibilityRole="radiogroup"
+              aria-labelledby="modoLabel"
+            >
               <TouchableOpacity
                 style={[styles.chip, !emprestando && styles.chipActive]}
                 onPress={() => trocarModo("solicitar")}
+                accessibilityRole="radio"
+                accessibilityLabel="Solicitar EPI"
+                accessibilityState={{ selected: !emprestando }}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Text style={[styles.chipText, !emprestando && styles.chipTextActive]}>
                   Solicitar EPI
@@ -537,6 +574,10 @@ export default function Solicitacoes() {
               <TouchableOpacity
                 style={[styles.chip, emprestando && styles.chipActive]}
                 onPress={() => trocarModo("emprestimo")}
+                accessibilityRole="radio"
+                accessibilityLabel="Emprestar uniforme"
+                accessibilityState={{ selected: emprestando }}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Text style={[styles.chipText, emprestando && styles.chipTextActive]}>
                   Emprestar uniforme
@@ -554,7 +595,7 @@ export default function Solicitacoes() {
             <View style={styles.materialList}>
               {loadingMateriais && (
                 <View style={styles.centerBox}>
-                  <ActivityIndicator color="#1B4A3B" />
+                  <ActivityIndicator color="#1B4A3B" accessibilityLabel="Carregando materiais..." />
                 </View>
               )}
 
@@ -581,6 +622,9 @@ export default function Solicitacoes() {
                           setUnidadeEntrada("embalagem");
                           if (formError) setFormError("");
                         }}
+                        accessibilityRole="radio"
+                        accessibilityLabel={`${material.nome}, categoria: ${material.categoria}`}
+                        accessibilityState={{ selected: ativo }}
                       >
                         <Text
                           style={[styles.materialName, ativo && styles.materialNameActive]}
@@ -597,8 +641,12 @@ export default function Solicitacoes() {
 
             {podeEscolherUnidade && (
               <>
-                <Text style={styles.fieldLabel}>Pedir por</Text>
-                <View style={styles.chipRow}>
+                <Text style={styles.fieldLabel} nativeID="unidadeLabel">Pedir por</Text>
+                <View
+                  style={styles.chipRow}
+                  accessibilityRole="radiogroup"
+                  aria-labelledby="unidadeLabel"
+                >
                   {[
                     { key: "embalagem", label: rotuloPorEmbalagem(materialSelecionado) },
                     { key: "unidade", label: ROTULO_POR_UNIDADE },
@@ -610,6 +658,10 @@ export default function Solicitacoes() {
                         style={[styles.chip, ativo && styles.chipActive]}
                         onPress={() => setUnidadeEntrada(opcao.key)}
                         disabled={saving}
+                        accessibilityRole="radio"
+                        accessibilityLabel={`Pedir por ${opcao.label}`}
+                        accessibilityState={{ selected: ativo }}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
                         <Text style={[styles.chipText, ativo && styles.chipTextActive]}>
                           {opcao.label}
@@ -632,6 +684,9 @@ export default function Solicitacoes() {
               keyboardType="numeric"
               maxLength={QUANTIDADE_MAX_DIGITOS}
               editable={!saving}
+              accessible={true}
+              accessibilityLabel={`Quantidade desejada${rotuloUnidade ? ` em ${rotuloUnidade}` : ""}`}
+              accessibilityHint="Digite a quantidade a ser solicitada"
             />
             {!!materialSelecionado && (
               <Text style={styles.fieldHelp}>
@@ -644,8 +699,12 @@ export default function Solicitacoes() {
 
             {emprestando && (
               <>
-                <Text style={styles.fieldLabel}>Data de devolução</Text>
-                <View style={styles.chipRow}>
+                <Text style={styles.fieldLabel} nativeID="atalhoPrazoLabel">Data de devolução</Text>
+                <View
+                  style={styles.chipRow}
+                  accessibilityRole="radiogroup"
+                  aria-labelledby="atalhoPrazoLabel"
+                >
                   {ATALHOS_PRAZO.map((atalho) => {
                     const valor = dataEmDias(atalho.dias);
                     const ativo = dataTexto === valor;
@@ -655,6 +714,10 @@ export default function Solicitacoes() {
                         style={[styles.chip, ativo && styles.chipActive]}
                         onPress={() => setDataTexto(valor)}
                         disabled={saving}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Prazo: ${atalho.label} (${valor})`}
+                        accessibilityState={{ selected: ativo }}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
                         <Text style={[styles.chipText, ativo && styles.chipTextActive]}>
                           {atalho.label}
@@ -671,6 +734,9 @@ export default function Solicitacoes() {
                   keyboardType="numeric"
                   maxLength={10}
                   editable={!saving}
+                  accessible={true}
+                  accessibilityLabel="Data de devolução"
+                  accessibilityHint="Digite a data de devolução no formato dia, mês e ano DD/MM/AAAA"
                 />
                 <Text style={styles.fieldHelp}>
                   Prazo máximo: {prazoMaximo} dias a partir de hoje.
@@ -687,17 +753,38 @@ export default function Solicitacoes() {
               multiline
               maxLength={OBSERVACAO_MAX}
               editable={!saving}
+              accessible={true}
+              accessibilityLabel="Observação"
+              accessibilityHint="Campo opcional para justificativa ou detalhes do pedido"
             />
 
-            {!!formError && <Text style={styles.errorText}>{formError}</Text>}
+            {!!formError && (
+              <Text
+                style={styles.errorText}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
+                {formError}
+              </Text>
+            )}
 
             <TouchableOpacity
               style={[styles.saveButton, saving && styles.buttonDisabled]}
               onPress={handleSubmit}
               disabled={saving}
+              accessibilityRole="button"
+              accessibilityLabel={
+                saving
+                  ? "Enviando..."
+                  : emprestando
+                  ? "Enviar pedido de empréstimo"
+                  : "Enviar solicitação"
+              }
+              accessibilityHint="Envia a solicitação para aprovação"
+              accessibilityState={{ busy: saving, disabled: saving }}
             >
               {saving ? (
-                <ActivityIndicator color="#ffffff" />
+                <ActivityIndicator color="#ffffff" accessibilityLabel="Enviando..." />
               ) : (
                 <Text style={styles.saveButtonText}>
                   {emprestando ? "Enviar pedido de empréstimo" : "Enviar solicitação"}
@@ -709,14 +796,24 @@ export default function Solicitacoes() {
 
         {loadingList && (
           <View style={styles.centerBox}>
-            <ActivityIndicator color="#1B4A3B" />
+            <ActivityIndicator color="#1B4A3B" accessibilityLabel="Carregando solicitações..." />
           </View>
         )}
 
         {!loadingList && !!listError && (
           <View style={styles.centerBox}>
-            <Text style={styles.errorText}>{listError}</Text>
-            <TouchableOpacity onPress={() => loadSolicitacoes(session.token)}>
+            <Text
+              style={styles.errorText}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="assertive"
+            >
+              {listError}
+            </Text>
+            <TouchableOpacity
+              onPress={() => loadSolicitacoes(session.token)}
+              accessibilityRole="button"
+              accessibilityLabel="Tentar carregar solicitações novamente"
+            >
               <Text style={styles.retryText}>Tentar novamente</Text>
             </TouchableOpacity>
           </View>
@@ -727,7 +824,11 @@ export default function Solicitacoes() {
             {/* UNIFORMES EMPRESTADOS (com prazo de devolução) */}
             {emprestadosAbertos.length > 0 && (
               <>
-                <Text style={styles.sectionTitle}>
+                <Text
+                  style={styles.sectionTitle}
+                  accessibilityRole="header"
+                  aria-level={2}
+                >
                   Uniformes para devolver ({emprestadosAbertos.length})
                 </Text>
                 {emprestadosAbertos.map((e) => (
@@ -738,7 +839,11 @@ export default function Solicitacoes() {
 
             {/* EM ANDAMENTO: solicitações de EPI e pedidos de empréstimo
                 aguardando confirmação */}
-            <Text style={styles.sectionTitle}>
+            <Text
+              style={styles.sectionTitle}
+              accessibilityRole="header"
+              aria-level={2}
+            >
               Em andamento{totalPendentes > 0 ? ` (${totalPendentes})` : ""}
             </Text>
             {totalPendentes === 0 ? (
@@ -760,7 +865,13 @@ export default function Solicitacoes() {
             )}
 
             {/* HISTÓRICO */}
-            <Text style={styles.sectionTitle}>Histórico</Text>
+            <Text
+              style={styles.sectionTitle}
+              accessibilityRole="header"
+              aria-level={2}
+            >
+              Histórico
+            </Text>
             {historico.length === 0 && emprestimosEncerrados.length === 0 ? (
               <Text style={styles.sectionEmpty}>
                 Seus pedidos respondidos e uniformes devolvidos aparecem aqui.
@@ -924,7 +1035,7 @@ const styles = StyleSheet.create({
   },
   materialCategory: {
     fontSize: 14,
-    color: "#80868b",
+    color: "#5f6368",
   },
   input: {
     borderWidth: 1,
@@ -1021,7 +1132,7 @@ const styles = StyleSheet.create({
   },
   requestDate: {
     fontSize: 14,
-    color: "#80868b",
+    color: "#5f6368",
     marginTop: 8,
   },
   requestNote: {
@@ -1047,7 +1158,7 @@ const styles = StyleSheet.create({
   },
   waitingText: {
     fontSize: 14,
-    color: "#80868b",
+    color: "#5f6368",
     fontStyle: "italic",
   },
   cancelButton: {
@@ -1075,7 +1186,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   badgePendente: { backgroundColor: "#fff4e0" },
-  badgePendenteText: { color: "#b26a00" },
+  badgePendenteText: { color: "#8a5200" },
   badgeAprovada: { backgroundColor: "#e6f4ea" },
   badgeAprovadaText: { color: "#1b6b3a" },
   badgeRecusada: { backgroundColor: "#fdeceb" },

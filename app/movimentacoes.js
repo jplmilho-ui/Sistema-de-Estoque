@@ -238,6 +238,11 @@ export default function Movimentacoes() {
               style={[styles.pdfButton, semDadosParaPdf && styles.buttonDisabled]}
               onPress={abrirModalPdf}
               disabled={semDadosParaPdf}
+              accessibilityRole="button"
+              accessibilityLabel="Gerar PDF das movimentações"
+              accessibilityHint="Abre a janela para selecionar o período e exportar relatório em PDF"
+              accessibilityState={{ disabled: semDadosParaPdf }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={styles.pdfButtonText}>Gerar PDF</Text>
             </TouchableOpacity>
@@ -262,6 +267,11 @@ export default function Movimentacoes() {
                 filtro === opt.key && styles.filterOptionActive,
               ]}
               onPress={() => setFiltro(opt.key)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: filtro === opt.key }}
+              accessibilityLabel={`Filtro: ${opt.label}`}
+              accessibilityHint="Filtra a lista pelo tipo de movimentação selecionado"
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <Text
                 style={[
@@ -304,13 +314,19 @@ export default function Movimentacoes() {
 
             {loading && (
               <View style={styles.centerBox}>
-                <ActivityIndicator />
+                <ActivityIndicator accessibilityLabel="Carregando movimentações..." />
               </View>
             )}
 
             {!loading && !!listError && (
               <View style={styles.centerBox}>
-                <Text style={styles.errorText}>{listError}</Text>
+                <Text
+                  style={styles.errorText}
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="assertive"
+                >
+                  {listError}
+                </Text>
               </View>
             )}
 
@@ -329,7 +345,12 @@ export default function Movimentacoes() {
             {!loading &&
               !listError &&
               movimentacoesFiltradas.map((item) => (
-                <View key={item.id} style={styles.row}>
+                <View
+                  key={item.id}
+                  style={styles.row}
+                  accessible={true}
+                  accessibilityLabel={`Data: ${item.data}, Material: ${item.materialNome}, Tipo: ${(TIPOS[item.tipo] || TIPOS.saida).label}, Quantidade: ${item.quantidade}, Responsável: ${item.responsavel}`}
+                >
                   <Text
                     style={[styles.cell, styles.cellData]}
                     numberOfLines={1}
@@ -381,10 +402,17 @@ export default function Movimentacoes() {
         transparent
         animationType="fade"
         onRequestClose={fecharModalPdf}
+        accessibilityViewIsModal={true}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.formTitle}>Gerar PDF</Text>
+          <View style={styles.modalCard} accessible={false}>
+            <Text
+              style={styles.formTitle}
+              accessibilityRole="header"
+              aria-level={2}
+            >
+              Gerar PDF
+            </Text>
 
             <Text style={styles.modalIntro}>
               Escolha o período das movimentações. Deixe a data final vazia para
@@ -399,6 +427,9 @@ export default function Movimentacoes() {
                   style={styles.atalhoOption}
                   onPress={() => aplicarAtalhoPeriodo(atalho.dias)}
                   disabled={pdfGerando}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Período: ${atalho.label}`}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
                   <Text style={styles.atalhoOptionText}>{atalho.label}</Text>
                 </TouchableOpacity>
@@ -407,11 +438,11 @@ export default function Movimentacoes() {
 
             <View style={styles.datasRow}>
               <View style={styles.dataCampo}>
-                <Text style={styles.dataLabel}>Data inicial</Text>
+                <Text style={styles.dataLabel} nativeID="dataInicialLabel">Data inicial</Text>
                 <TextInput
                   style={styles.dataInput}
                   placeholder="DD/MM/AAAA"
-                  placeholderTextColor="#9aa0a6"
+                  placeholderTextColor="#757575"
                   value={dataInicial}
                   onChangeText={(texto) => setDataInicial(mascararData(texto))}
                   keyboardType="numeric"
@@ -419,27 +450,41 @@ export default function Movimentacoes() {
                   editable={!pdfGerando}
                   onSubmitEditing={handleGerarPdf}
                   autoFocus
+                  accessible={true}
+                  accessibilityLabel="Data inicial"
+                  accessibilityHint="Digite a data inicial no formato dia, mês e ano DD/MM/AAAA"
+                  aria-labelledby="dataInicialLabel"
                 />
               </View>
 
               <View style={styles.dataCampo}>
-                <Text style={styles.dataLabel}>Data final</Text>
+                <Text style={styles.dataLabel} nativeID="dataFinalLabel">Data final</Text>
                 <TextInput
                   style={styles.dataInput}
                   placeholder="Agora"
-                  placeholderTextColor="#9aa0a6"
+                  placeholderTextColor="#757575"
                   value={dataFinal}
                   onChangeText={(texto) => setDataFinal(mascararData(texto))}
                   keyboardType="numeric"
                   maxLength={10}
                   editable={!pdfGerando}
                   onSubmitEditing={handleGerarPdf}
+                  accessible={true}
+                  accessibilityLabel="Data final"
+                  accessibilityHint="Digite a data final no formato DD/MM/AAAA ou deixe em branco para incluir até agora"
+                  aria-labelledby="dataFinalLabel"
                 />
               </View>
             </View>
 
             {!!periodo.erro && (
-              <Text style={styles.modalErrorText}>{periodo.erro}</Text>
+              <Text
+                style={styles.modalErrorText}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
+                {periodo.erro}
+              </Text>
             )}
 
             <Text style={styles.filtrosInfo}>
@@ -453,6 +498,8 @@ export default function Movimentacoes() {
                     ? styles.resumoOk
                     : styles.resumoVazio
                 }
+                accessibilityRole="summary"
+                accessibilityLiveRegion="polite"
               >
                 {movimentacoesParaPdf.length > 0
                   ? `${movimentacoesParaPdf.length} ${
@@ -464,13 +511,23 @@ export default function Movimentacoes() {
               </Text>
             )}
 
-            {!!pdfErro && <Text style={styles.modalErrorText}>{pdfErro}</Text>}
+            {!!pdfErro && (
+              <Text
+                style={styles.modalErrorText}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
+                {pdfErro}
+              </Text>
+            )}
 
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.actionButton, styles.modalCancelButton]}
                 onPress={fecharModalPdf}
                 disabled={pdfGerando}
+                accessibilityRole="button"
+                accessibilityLabel="Cancelar exportação"
               >
                 <Text style={styles.actionButtonText}>Cancelar</Text>
               </TouchableOpacity>
@@ -482,9 +539,12 @@ export default function Movimentacoes() {
                 ]}
                 onPress={handleGerarPdf}
                 disabled={!podeGerarPdf}
+                accessibilityRole="button"
+                accessibilityLabel={pdfGerando ? "Gerando PDF..." : "Gerar arquivo PDF"}
+                accessibilityState={{ busy: pdfGerando, disabled: !podeGerarPdf }}
               >
                 {pdfGerando ? (
-                  <ActivityIndicator color="#ffffff" />
+                  <ActivityIndicator color="#ffffff" accessibilityLabel="Gerando PDF..." />
                 ) : (
                   <Text style={styles.saveButtonText}>Gerar PDF</Text>
                 )}
@@ -592,7 +652,7 @@ const styles = StyleSheet.create({
   },
   tipoBadgeSaida: {
     backgroundColor: "#fdeee6",
-    color: "#c86756",
+    color: "#c62828",
   },
   tipoBadgeDevolucao: {
     backgroundColor: "#e8f0fe",

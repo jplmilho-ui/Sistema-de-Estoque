@@ -605,12 +605,25 @@ export default function Estoque() {
             <TouchableOpacity
               style={styles.reportButton}
               onPress={handleGerarRelatorio}
+              accessibilityRole="button"
+              accessibilityLabel="Gerar relatório em planilha Excel"
+              accessibilityHint="Exporta a lista atual de materiais para um arquivo .xlsx"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={styles.reportButtonText}>Gerar relatório</Text>
             </TouchableOpacity>
 
             {retiradasTermo.length > 0 && (
-              <TouchableOpacity style={styles.termoButton} onPress={handleGerarTermo}>
+              <TouchableOpacity
+                style={styles.termoButton}
+                onPress={handleGerarTermo}
+                accessibilityRole="button"
+                accessibilityLabel={`Gerar termo de retirada com ${retiradasTermo.length} ${
+                  retiradasTermo.length === 1 ? "item" : "itens"
+                }`}
+                accessibilityHint="Gera documento em PDF para assinatura das retiradas efetuadas"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
                 <Text style={styles.termoButtonText}>
                   Termo de retirada ({retiradasTermo.length})
                 </Text>
@@ -620,6 +633,10 @@ export default function Estoque() {
             <TouchableOpacity
               style={styles.retirarButton}
               onPress={() => openMovement("retirar")}
+              accessibilityRole="button"
+              accessibilityLabel="Retirar item do estoque"
+              accessibilityHint="Abre a janela para registrar a retirada do item selecionado"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={styles.retirarButtonText}>Retirar item</Text>
             </TouchableOpacity>
@@ -627,6 +644,10 @@ export default function Estoque() {
             <TouchableOpacity
               style={styles.addButton}
               onPress={() => openMovement("adicionar")}
+              accessibilityRole="button"
+              accessibilityLabel="Adicionar item ao estoque"
+              accessibilityHint="Abre a janela para registrar a entrada de quantidade no item selecionado"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={styles.addButtonText}>+ Adicionar item</Text>
             </TouchableOpacity>
@@ -642,7 +663,7 @@ export default function Estoque() {
       />
 
       {/* Abas: materiais x empréstimos de uniforme */}
-      <View style={styles.abaRow}>
+      <View style={styles.abaRow} accessibilityRole="tablist">
         {[
           { key: "materiais", label: "Materiais" },
           { key: "emprestimos", label: "Empréstimos de uniforme" },
@@ -653,6 +674,10 @@ export default function Estoque() {
               key={opcao.key}
               style={[styles.abaButton, ativa && styles.abaButtonActive]}
               onPress={() => setAba(opcao.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: ativa }}
+              accessibilityLabel={`Aba ${opcao.label}`}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <Text style={[styles.abaText, ativa && styles.abaTextActive]}>{opcao.label}</Text>
             </TouchableOpacity>
@@ -675,6 +700,10 @@ export default function Estoque() {
               key={opcao.key}
               style={[styles.categoriaChip, ativo && styles.categoriaChipActive]}
               onPress={() => setCategoriaFiltro(opcao.key)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: ativo }}
+              accessibilityLabel={`Categoria: ${opcao.label}, ${contagemPorCategoria[opcao.key]} itens`}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <Text
                 style={[styles.categoriaChipText, ativo && styles.categoriaChipTextActive]}
@@ -697,9 +726,18 @@ export default function Estoque() {
       </View>
 
       {mostrarSoVencidos && (
-        <View style={styles.filtroChip}>
+        <View
+          style={styles.filtroChip}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+        >
           <Text style={styles.filtroChipText}>Mostrando só itens vencidos</Text>
-          <TouchableOpacity onPress={() => setMostrarSoVencidos(false)}>
+          <TouchableOpacity
+            onPress={() => setMostrarSoVencidos(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Remover filtro de itens vencidos e ver todos os materiais"
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
             <Text style={styles.filtroChipClose}>Ver todos</Text>
           </TouchableOpacity>
         </View>
@@ -722,13 +760,19 @@ export default function Estoque() {
 
           {loadingList && (
             <View style={styles.centerBox}>
-              <ActivityIndicator />
+              <ActivityIndicator accessibilityLabel="Carregando estoque..." />
             </View>
           )}
 
           {!loadingList && !!listError && (
             <View style={styles.centerBox}>
-              <Text style={styles.errorText}>{listError}</Text>
+              <Text
+                style={styles.errorText}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
+                {listError}
+              </Text>
             </View>
           )}
 
@@ -765,12 +809,19 @@ export default function Estoque() {
               const selected = material.id === selectedId;
               const vencido = isVencido(material.validade);
               const estoqueBaixo = isEstoqueBaixo(material);
+              const a11yLabel = `Material: ${material.nome}, Quantidade: ${textoQuantidade(material.quantidadeTotal, material)}${estoqueBaixo ? ", alerta de estoque baixo" : ""}, Validade: ${material.validade || "não informada"}${vencido ? ", produto vencido" : ""}, Categoria: ${material.categoria}, C.A.: ${material.ca || "não informado"}, ${selected ? "selecionado" : "não selecionado"}`;
+
               return (
                 <TouchableOpacity
                   key={material.id}
                   style={[styles.row, vencido && styles.rowVencido]}
                   activeOpacity={0.7}
                   onPress={() => toggleSelect(material.id)}
+                  accessible={true}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: selected }}
+                  accessibilityLabel={a11yLabel}
+                  accessibilityHint="Toque duas vezes para selecionar ou desmarcar este item"
                 >
                   <View style={styles.checkboxColumn}>
                     <View
@@ -823,10 +874,15 @@ export default function Estoque() {
         transparent
         animationType="fade"
         onRequestClose={closeMovement}
+        accessibilityViewIsModal={true}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.formTitle}>
+          <View style={styles.modalCard} accessible={false}>
+            <Text
+              style={styles.formTitle}
+              accessibilityRole="header"
+              aria-level={2}
+            >
               {movement?.tipo === "retirar" ? "Retirar item" : "Adicionar item"}
             </Text>
 
@@ -842,7 +898,7 @@ export default function Estoque() {
             {/* Item que vem em caixa/pacote: escolhe se a quantidade é em
                 embalagens fechadas ou em unidades soltas. */}
             {modalTemEmbalagem && (
-              <View style={styles.unidadeRow}>
+              <View style={styles.unidadeRow} accessibilityRole="radiogroup">
                 {[
                   { key: "embalagem", label: rotuloPorEmbalagem(selectedMaterial) },
                   { key: "unidade", label: ROTULO_POR_UNIDADE },
@@ -861,6 +917,10 @@ export default function Estoque() {
                         if (movementError) setMovementError("");
                       }}
                       disabled={movementSaving}
+                      accessibilityRole="radio"
+                      accessibilityLabel={`Unidade: ${opcao.label}`}
+                      accessibilityState={{ selected: ativa }}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
                       <Text
                         style={[
@@ -896,6 +956,9 @@ export default function Estoque() {
               editable={!movementSaving}
               onSubmitEditing={handleConfirmMovement}
               autoFocus
+              accessible={true}
+              accessibilityLabel="Quantidade"
+              accessibilityHint="Digite a quantidade inteira a ser movimentada"
             />
 
             {modalTemEmbalagem &&
@@ -908,13 +971,24 @@ export default function Estoque() {
                 </Text>
               )}
 
-            {!!movementError && <Text style={styles.errorText}>{movementError}</Text>}
+            {!!movementError && (
+              <Text
+                style={styles.errorText}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
+                {movementError}
+              </Text>
+            )}
 
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.actionButton, styles.modalCancelButton]}
                 onPress={closeMovement}
                 disabled={movementSaving}
+                accessibilityRole="button"
+                accessibilityLabel="Cancelar movimentação"
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Text style={styles.actionButtonText}>Cancelar</Text>
               </TouchableOpacity>
@@ -923,9 +997,12 @@ export default function Estoque() {
                 style={[styles.saveButton, movementSaving && styles.buttonDisabled]}
                 onPress={handleConfirmMovement}
                 disabled={movementSaving}
+                accessibilityRole="button"
+                accessibilityLabel={movementSaving ? "Confirmando movimentação..." : "Confirmar movimentação"}
+                accessibilityState={{ busy: movementSaving, disabled: movementSaving }}
               >
                 {movementSaving ? (
-                  <ActivityIndicator color="#ffffff" />
+                  <ActivityIndicator color="#ffffff" accessibilityLabel="Confirmando..." />
                 ) : (
                   <Text style={styles.saveButtonText}>Confirmar</Text>
                 )}
@@ -940,14 +1017,25 @@ export default function Estoque() {
         transparent
         animationType="fade"
         onRequestClose={() => setRetiradaFeita(null)}
+        accessibilityViewIsModal={true}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.formTitle}>Retirada registrada</Text>
+          <View style={styles.modalCard} accessible={false}>
+            <Text
+              style={styles.formTitle}
+              accessibilityRole="header"
+              aria-level={2}
+            >
+              Retirada registrada
+            </Text>
             <Text style={styles.modalMaterialNome}>
               {retiradaFeita?.quantidadeTexto} de {retiradaFeita?.nome}
             </Text>
-            <Text style={styles.helperText}>
+            <Text
+              style={styles.helperText}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+            >
               Gere o termo em PDF para imprimir e assinar. Ele inclui{" "}
               {retiradasTermo.length === 1
                 ? "este item"
@@ -959,11 +1047,20 @@ export default function Estoque() {
               <TouchableOpacity
                 style={[styles.actionButton, styles.modalCancelButton]}
                 onPress={() => setRetiradaFeita(null)}
+                accessibilityRole="button"
+                accessibilityLabel="Fechar aviso de retirada"
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Text style={styles.actionButtonText}>Agora não</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.saveButton} onPress={handleGerarTermo}>
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleGerarTermo}
+                accessibilityRole="button"
+                accessibilityLabel="Gerar termo de retirada em PDF"
+                accessibilityHint="Gera e faz o download do termo de retirada em PDF"
+              >
                 <Text style={styles.saveButtonText}>Gerar termo (PDF)</Text>
               </TouchableOpacity>
             </View>

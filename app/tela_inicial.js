@@ -202,7 +202,7 @@ export default function tela_inicial() {
 
   return (
     <AppBar>
-      <PageHeader title="Tela Inicial"/>
+      <PageHeader title="Tela Inicial" />
       <ScrollView
         style={styles.Space}
         contentContainerStyle={{ flexGrow: 1 }}
@@ -212,29 +212,50 @@ export default function tela_inicial() {
           {/* Saudação */}
           <View style={styles.greetingRow}>
             <View>
-              <Text style={styles.greetingTitle}>Olá!</Text>
+              <Text
+                style={styles.greetingTitle}
+                accessibilityRole="header"
+                aria-level={1}
+              >
+                Olá!
+              </Text>
               <Text style={styles.greetingSubtitle}>
                 Bem-vindo ao Sistema de Estoque do Curso de Enfermagem.
               </Text>
             </View>
-            <View style={styles.dateBadge}>
+            <View
+              style={styles.dateBadge}
+              accessible={true}
+              accessibilityLabel={`Data de hoje: ${DATA_LABEL}`}
+            >
               <Text style={styles.dateBadgeText}>{DATA_LABEL}</Text>
             </View>
           </View>
 
           {/* Aviso de validação */}
           {!loadingResumo && !resumoError && proximosDaValidade > 0 && (
-            <View style={styles.validationRow}>
+            <View
+              style={styles.validationRow}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+            >
               <View style={styles.validationMessage}>
                 <Text style={styles.validationText}>
                   Você possui {proximosDaValidade}{" "}
-                  {proximosDaValidade === 1 ? "item" : "itens"} próximos da validade!
+                  {proximosDaValidade === 1 ? "item próximo" : "itens próximos"} da validade!
                 </Text>
               </View>
 
               <TouchableOpacity
                 style={styles.verificarButton}
                 onPress={() => router.push("/estoque")}
+                accessibilityRole="button"
+                accessibilityLabel={`Verificar ${proximosDaValidade} ${
+                  proximosDaValidade === 1 ? "item próximo" : "itens próximos"
+                } da validade no estoque`}
+                accessibilityHint="Abre a tela de estoque para verificar os produtos próximos da validade"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.8}
               >
                 <Text style={styles.verificarText}>Verificar</Text>
               </TouchableOpacity>
@@ -242,17 +263,36 @@ export default function tela_inicial() {
           )}
 
           {!!resumoError && (
-            <View style={styles.validationRow}>
+            <View
+              style={styles.validationRow}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="assertive"
+            >
               <Text style={styles.errorText}>{resumoError}</Text>
             </View>
           )}
 
-          <Text style={styles.sectionTitle}>Visão geral do estoque</Text>
+          <Text
+            style={styles.sectionTitle}
+            accessibilityRole="header"
+            aria-level={2}
+          >
+            Visão geral do estoque
+          </Text>
 
           {/* Cards de resumo */}
           <View style={styles.statsRow}>
             {statCards.map((card) => {
-              const CardWrapper = card.onPress ? TouchableOpacity : View;
+              const isClickable = Boolean(card.onPress);
+              const CardWrapper = isClickable ? TouchableOpacity : View;
+              const cardValueText = card.value === null ? "Carregando" : card.value;
+              const a11yLabel = `${card.label}: ${cardValueText}`;
+              const a11yHint = card.key === "vencidos"
+                ? "Abre a tela de estoque filtrando pelos produtos vencidos"
+                : card.key === "movimentacoes"
+                ? "Abre a tela com o histórico de movimentações"
+                : undefined;
+
               return (
                 <CardWrapper
                   key={card.key}
@@ -260,8 +300,13 @@ export default function tela_inicial() {
                     styles.statCard,
                     card.variant === "danger" && styles.statCardDanger,
                   ]}
-                  activeOpacity={card.onPress ? 0.85 : 1}
+                  activeOpacity={isClickable ? 0.85 : 1}
                   onPress={card.onPress}
+                  accessible={true}
+                  accessibilityRole={isClickable ? "button" : "summary"}
+                  accessibilityLabel={a11yLabel}
+                  accessibilityHint={a11yHint}
+                  accessibilityState={{ busy: card.value === null }}
                 >
                   <View
                     style={[
@@ -278,7 +323,11 @@ export default function tela_inicial() {
                   <View style={styles.statTextArea}>
                     <Text style={styles.statLabel}>{card.label}</Text>
                     {card.value === null ? (
-                      <ActivityIndicator size="small" />
+                      <ActivityIndicator
+                        size="small"
+                        color={card.variant === "danger" ? "#c62828" : "#1B4A3B"}
+                        accessibilityLabel={`Carregando ${card.label}`}
+                      />
                     ) : (
                       <Text style={styles.statValue}>{card.value}</Text>
                     )}
@@ -295,19 +344,43 @@ export default function tela_inicial() {
             <View style={[styles.chartPanel, compacto && styles.panelCompacto]}>
               <View style={styles.panelHeaderRow}>
                 <View>
-                  <Text style={styles.panelTitle}>Produtos Cadastrados</Text>
+                  <Text
+                    style={styles.panelTitle}
+                    accessibilityRole="header"
+                    aria-level={3}
+                  >
+                    Produtos Cadastrados
+                  </Text>
                   <Text style={styles.panelSubtitle}>Quantidade por categoria</Text>
                 </View>
               </View>
 
               {loadingMaterials ? (
-                <ActivityIndicator style={{ marginTop: 24 }} />
+                <ActivityIndicator
+                  style={{ marginTop: 24 }}
+                  color="#1B4A3B"
+                  accessibilityLabel="Carregando produtos cadastrados"
+                />
               ) : materialsError ? (
-                <Text style={styles.errorText}>{materialsError}</Text>
+                <Text
+                  style={styles.errorText}
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="assertive"
+                >
+                  {materialsError}
+                </Text>
               ) : (
                 <View style={styles.barChartContainer}>
                   {categoriaCounts.map(({ categoria, quantidade }) => (
-                    <View key={categoria} style={styles.barColumn}>
+                    <View
+                      key={categoria}
+                      style={styles.barColumn}
+                      accessible={true}
+                      accessibilityRole="text"
+                      accessibilityLabel={`${categoria}: ${quantidade} ${
+                        quantidade === 1 ? "produto cadastrado" : "produtos cadastrados"
+                      }`}
+                    >
                       <Text style={styles.barValue}>{quantidade}</Text>
                       <View
                         style={[
@@ -327,10 +400,21 @@ export default function tela_inicial() {
             {/* Últimas movimentações */}
             <View style={[styles.movPanel, compacto && styles.panelCompacto]}>
               <View style={styles.panelHeaderRow}>
-                <Text style={styles.panelTitle}>Últimas movimentações</Text>
+                <Text
+                  style={styles.panelTitle}
+                  accessibilityRole="header"
+                  aria-level={3}
+                >
+                  Últimas movimentações
+                </Text>
                 <TouchableOpacity
                   style={styles.verTodasRow}
                   onPress={() => router.push("/movimentacoes")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ver todas as movimentações"
+                  accessibilityHint="Navega para a tela com o histórico completo de movimentações"
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.verTodasText}>Ver todas</Text>
                   <Icon name="arrow-right" size={14} color="#1B4A3B" />
@@ -338,9 +422,19 @@ export default function tela_inicial() {
               </View>
 
               {loadingMovimentacoes ? (
-                <ActivityIndicator style={{ marginTop: 24 }} />
+                <ActivityIndicator
+                  style={{ marginTop: 24 }}
+                  color="#1B4A3B"
+                  accessibilityLabel="Carregando últimas movimentações"
+                />
               ) : movimentacoesError ? (
-                <Text style={styles.errorText}>{movimentacoesError}</Text>
+                <Text
+                  style={styles.errorText}
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="assertive"
+                >
+                  {movimentacoesError}
+                </Text>
               ) : ultimasMovimentacoes.length === 0 ? (
                 <Text style={styles.emptyMovText}>
                   Nenhuma movimentação registrada ainda.
@@ -348,8 +442,17 @@ export default function tela_inicial() {
               ) : (
                 ultimasMovimentacoes.map((mov) => {
                   const tipo = TIPOS_MOV[mov.tipo] || TIPOS_MOV.saida;
+                  const a11yMovLabel = `${tipo.label} de ${mov.materialNome}, quantidade: ${tipo.sinal} ${mov.quantidade}${
+                    mov.responsavel ? `, responsável: ${mov.responsavel}` : ""
+                  }, data: ${mov.data}`;
+
                   return (
-                    <View key={mov.id} style={styles.movRow}>
+                    <View
+                      key={mov.id}
+                      style={styles.movRow}
+                      accessible={true}
+                      accessibilityLabel={a11yMovLabel}
+                    >
                       <View style={[styles.movIconCircle, { backgroundColor: tipo.fundo }]}>
                         <Icon name={tipo.icon} size={14} color={tipo.cor} />
                       </View>
@@ -412,7 +515,7 @@ const styles = StyleSheet.create({
   greetingTitle: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "#0ba572",
+    color: "#137854",
     marginBottom: 2,
   },
 
@@ -461,10 +564,14 @@ const styles = StyleSheet.create({
 
   verificarButton: {
     borderWidth: 1,
+    borderColor: "#1B4A3B",
     borderRadius: 4,
     backgroundColor: "#1B4A3B",
     paddingHorizontal: 18,
-    paddingVertical: 5,
+    paddingVertical: 8,
+    minHeight: 38,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   verificarText: {
@@ -586,6 +693,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    minHeight: 32,
   },
 
   verTodasText: {
@@ -636,7 +746,7 @@ const styles = StyleSheet.create({
   // Lista de últimas movimentações
   emptyMovText: {
     fontSize: 13,
-    color: "#8a8a8a",
+    color: "#5f6368",
     marginTop: 8,
   },
 
@@ -687,7 +797,7 @@ const styles = StyleSheet.create({
 
   movData: {
     fontSize: 11,
-    color: "#8a8a8a",
+    color: "#5f6368",
     marginTop: 1,
   },
-});
+}); 

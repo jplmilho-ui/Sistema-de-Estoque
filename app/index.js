@@ -61,14 +61,20 @@ export default function Login() {
           source={require('../assets/logo_sece_minimalista.png')}
           style={styles.logo}
           resizeMode="contain"
+          accessible={true}
+          accessibilityLabel="Logotipo SECE - Sistema de Estoque do Curso de Enfermagem"
         />
 
-        <Text style={styles.title}>
+        <Text
+          style={styles.title}
+          accessibilityRole="header"
+          aria-level={1}
+        >
           Área de login
         </Text>
 
         <View style={styles.field}>
-          <Text style={styles.label}>
+          <Text style={styles.label} nativeID="emailLabel">
             Email
           </Text>
 
@@ -84,12 +90,18 @@ export default function Login() {
             }}
             keyboardType="email-address"
             autoCapitalize="none"
+            autoComplete="email"
+            textContentType="emailAddress"
             editable={!loading}
+            accessible={true}
+            accessibilityLabel="Email"
+            accessibilityHint="Digite o seu endereço de e-mail cadastrado"
+            aria-labelledby="emailLabel"
           />
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>
+          <Text style={styles.label} nativeID="senhaLabel">
             Senha
           </Text>
 
@@ -104,13 +116,23 @@ export default function Login() {
               }
             }}
             secureTextEntry
+            autoComplete="password"
+            textContentType="password"
             editable={!loading}
+            accessible={true}
+            accessibilityLabel="Senha"
+            accessibilityHint="Digite a sua senha de acesso"
+            aria-labelledby="senhaLabel"
           />
         </View>
 
         <TouchableOpacity
           style={styles.forgotWrapper}
           disabled={loading}
+          accessibilityRole="button"
+          accessibilityLabel="Esqueceu a senha?"
+          accessibilityHint="Exibe orientações de como redefinir a sua senha com a coordenação"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           onPress={() =>
             Alert.alert(
               'Esqueceu a senha?',
@@ -124,7 +146,11 @@ export default function Login() {
         </TouchableOpacity>
 
         {!!errorMessage && (
-          <Text style={styles.errorText}>
+          <Text
+            style={styles.errorText}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="assertive"
+          >
             {errorMessage}
           </Text>
         )}
@@ -136,9 +162,13 @@ export default function Login() {
           ]}
           onPress={handleLogin}
           disabled={loading}
+          accessibilityRole="button"
+          accessibilityLabel={loading ? "Entrando..." : "Entrar no sistema"}
+          accessibilityHint="Autentica suas credenciais e entra no sistema de estoque"
+          accessibilityState={{ busy: loading, disabled: loading }}
         >
           {loading ? (
-            <ActivityIndicator color="#1a1a1a" />
+            <ActivityIndicator color="#101111" accessibilityLabel="Entrando no sistema..." />
           ) : (
             <Text style={styles.buttonText}>
               Login

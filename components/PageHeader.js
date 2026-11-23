@@ -10,7 +10,11 @@ export default function PageHeader({ title, subtitle, actions }) {
     <>
       <View style={[styles.header, { paddingHorizontal: recuo }]}>
         <View style={styles.titleBlock}>
-          <Text style={[styles.headerTitle, celular && styles.headerTitleCelular]}>
+          <Text
+            style={[styles.headerTitle, celular && styles.headerTitleCelular]}
+            accessibilityRole="header"
+            aria-level={1}
+          >
             {title}
           </Text>
           {!!subtitle && <Text style={styles.headerSubtitle}>{subtitle}</Text>}
