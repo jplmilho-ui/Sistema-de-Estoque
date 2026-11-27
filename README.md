@@ -57,13 +57,13 @@ Antes do sistema, o controle de estoque era feito de forma manual, o que dificul
 ## 🖼️ Imagens do sistema
 
 ### Tela de login
-![Tela de login](docs/img/login.png)
+![Tela de login](design/tela_login.png)
 
 ### Tela inicial
-![Tela inicial](docs/img/home.png)
+![Tela inicial](design/tela_inicial.png)
 
-### Tela de estoque (funcionalidade principal)
-![Tela de estoque](docs/img/estoque.png)
+### Tela de estoque
+![Tela de estoque](design/tela_estoque.png)
 
 ---
 
