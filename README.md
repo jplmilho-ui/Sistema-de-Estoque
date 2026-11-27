@@ -6,6 +6,9 @@
 ### Sistema web para o controle de estoque do curso de Enfermagem
 
 ![Status](https://img.shields.io/badge/status-concluído-brightgreen)
+![React](https://img.shields.io/badge/React-[versão]-61DAFB?logo=react&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-[versão]-339933?logo=nodedotjs&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-[versão]-4169E1?logo=postgresql&logoColor=white)
 
 </div>
 
